@@ -1,118 +1,230 @@
-// Copyright 2024 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-/*
- * This example is the smallest code that will create a Matter Device which can be
- * commissioned and controlled from a Matter Environment APP.
- * It controls a GPIO that could be attached to a LED for visualization.
- * Additionally the ESP32 will send debug messages indicating the Matter activity.
- * Turning DEBUG Level ON may be useful to following Matter Accessory and Controller messages.
- */
-
-// Matter Manager
 #include <Matter.h>
-#include <WiFi.h>
 
-// List of Matter Endpoints for this Node
-// Single On/Off Light Endpoint - at least one per node
-MatterOnOffLight OnOffLight;
+#include "button.h"
+#include "rgb_led.h"
 
-// WiFi is manually set and started
-const char *ssid = "Wallace";
-const char *password = "d641e9c7ed31309db24eec6016e98f197d335b7067d76bf80ac2368640c5122f";
+Button btn(BOOT_PIN, /* long hold timeout [ms] */ 5000);
+RgbLed led(PIN_RGB_LED);
 
-// Light GPIO that can be controlled by Matter APP
-#ifdef LED_BUILTIN
-const uint8_t ledPin = LED_BUILTIN;
-#else
-const uint8_t ledPin = 4;  // Set your pin here if your board has not defined LED_BUILTIN
-#endif
+MatterOccupancySensor matter_occupancy_sensor;
 
-// set your board USER BUTTON pin here - decommissioning button
-const uint8_t buttonPin = BOOT_PIN;  // Set your pin here. Using BOOT Button.
-
-// Button control - decommision the Matter Node
-uint32_t button_time_stamp = 0;                // debouncing control
-bool button_state = false;                     // false = released | true = pressed
-const uint32_t decommissioningTimeout = 5000;  // keep the button pressed for 5s, or longer, to decommission
-
-// Matter Protocol Endpoint (On/OFF Light) Callback
-bool onOffLightCallback(bool state) {
-  digitalWrite(ledPin, state ? HIGH : LOW);
-  // This callback must return the success state to Matter core
-  return true;
-}
+static constexpr const char* TAG = "main";
+void matterEventCallback(matterEvent_t,
+                         const chip::DeviceLayer::ChipDeviceEvent*);
 
 void setup() {
-  Serial.begin(115200);
+  led.setBackground(RgbLed::Color::Green);
 
-  // Initialize the USER BUTTON (Boot button) that will be used to decommission the Matter Node
-  pinMode(buttonPin, INPUT_PULLUP);
-  // Initialize the LED GPIO
-  pinMode(ledPin, OUTPUT);
+  /* Log Levels */
+  esp_log_level_set("chip[IM]", ESP_LOG_WARN);
+  esp_log_level_set("chip[EM]", ESP_LOG_WARN);
+  esp_log_level_set("ROUTE_HOOK", ESP_LOG_WARN);
 
-  // Manually connect to WiFi
-  WiFi.begin(ssid, password);
-  // Wait for connection
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
-    delay(500);
-  }
-  Serial.println();
+  /* Matter Endpoint */
+  matter_occupancy_sensor.begin();
 
-  // Initialize at least one Matter EndPoint
-  OnOffLight.begin();
-
-  // Associate a callback to the Matter Controller
-  OnOffLight.onChange(onOffLightCallback);
-  log_i("Matter On/Off Light EndPoint created with Endpoint ID %d", OnOffLight.getEndPointId());
-
-  // Matter beginning - Last step, after all EndPoints are initialized
+  /* Matter */
+  Matter.onEvent(matterEventCallback);
   Matter.begin();
-  log_i("Matter Node started with Endpoint ID %d", OnOffLight.getEndPointId());
 
+  /* Matter Commissioning */
   if (!Matter.isDeviceCommissioned()) {
-    Serial.println("Matter Node is not commissioned yet.");
-    Serial.println("Initiate the device discovery in your Matter environment.");
-    Serial.println("Commission it to your Matter hub with the manual pairing code or QR code");
-    Serial.printf("Manual pairing code: %s\r\n", Matter.getManualPairingCode().c_str());
-    Serial.printf("QR code URL: %s\r\n", Matter.getOnboardingQRCodeUrl().c_str());
+    ESP_LOGI(TAG, "Matter pairing code: %s",
+             Matter.getManualPairingCode().c_str());
+    ESP_LOGI(TAG, "Matter QR code URL: %s",
+             Matter.getOnboardingQRCodeUrl().c_str());
+    uint32_t timeCount = 0;
+    while (!Matter.isDeviceCommissioned()) {
+      delay(100);
+      if ((timeCount++ % 50) == 0)
+        ESP_LOGI(TAG, "Matter commissioning is in progress ...");
+    }
+    ESP_LOGI(TAG, "Matter Node is commissioned successfully.");
   }
 }
 
 void loop() {
-  // Check if the button has been pressed
-  if (digitalRead(buttonPin) == LOW && !button_state) {
-    // deals with button debouncing
-    button_time_stamp = millis();  // record the time while the button is pressed.
-    button_state = true;           // pressed.
-  }
+  /* update */
+  led.update();
+  btn.update();
 
-  if (digitalRead(buttonPin) == HIGH && button_state) {
-    button_state = false;  // released
-  }
+  /* button */
+  if (btn.pressed()) ESP_LOGI(TAG, "button pressed");
+  if (btn.longPressed()) ESP_LOGI(TAG, "button long pressed");
+  if (btn.longHoldStarted()) ESP_LOGI(TAG, "button long hold started");
 
-  // Onboard User Button is kept pressed for longer than 5 seconds in order to decommission matter node
-  uint32_t time_diff = millis() - button_time_stamp;
-  if (button_state && time_diff > decommissioningTimeout) {
-    Serial.println("Decommissioning the Light Matter Accessory. It shall be commissioned again.");
+  /* matter decommissioning */
+  if (btn.longPressed()) {
+    ESP_LOGI(TAG, "Decommissioning Matter Node...");
+    led.setBackground(RgbLed::Color::Green);
     Matter.decommission();
-    button_time_stamp = millis();  // avoid running decommissining again, reboot takes a second or so
   }
 
-  delay(500);
+  /* oocupancy sensor (dummy) */
+  static bool occupancyState = false;
+  if (btn.pressed()) {
+    occupancyState = !occupancyState;
+    if (occupancyState)
+      led.blinkOnce(RgbLed::Color::Cyan);
+    else
+      led.blinkOnce(RgbLed::Color::Magenta);
+  }
+  matter_occupancy_sensor.setOccupancy(occupancyState);
+
+  /* wdt release */
+  delay(1);
+}
+
+const char* matterEventToString(uint16_t eventType) {
+  switch (eventType) {
+    case MATTER_WIFI_CONNECTIVITY_CHANGE:
+      return "MATTER_WIFI_CONNECTIVITY_CHANGE";
+    case MATTER_THREAD_CONNECTIVITY_CHANGE:
+      return "MATTER_THREAD_CONNECTIVITY_CHANGE";
+    case MATTER_INTERNET_CONNECTIVITY_CHANGE:
+      return "MATTER_INTERNET_CONNECTIVITY_CHANGE";
+    case MATTER_SERVICE_CONNECTIVITY_CHANGE:
+      return "MATTER_SERVICE_CONNECTIVITY_CHANGE";
+    case MATTER_SERVICE_PROVISIONING_CHANGE:
+      return "MATTER_SERVICE_PROVISIONING_CHANGE";
+    case MATTER_TIME_SYNC_CHANGE:
+      return "MATTER_TIME_SYNC_CHANGE";
+    case MATTER_CHIPOBLE_CONNECTION_ESTABLISHED:
+      return "MATTER_CHIPOBLE_CONNECTION_ESTABLISHED";
+    case MATTER_CHIPOBLE_CONNECTION_CLOSED:
+      return "MATTER_CHIPOBLE_CONNECTION_CLOSED";
+    case MATTER_CLOSE_ALL_BLE_CONNECTIONS:
+      return "MATTER_CLOSE_ALL_BLE_CONNECTIONS";
+    case MATTER_WIFI_DEVICE_AVAILABLE:
+      return "MATTER_WIFI_DEVICE_AVAILABLE";
+    case MATTER_OPERATIONAL_NETWORK_STARTED:
+      return "MATTER_OPERATIONAL_NETWORK_STARTED";
+    case MATTER_THREAD_STATE_CHANGE:
+      return "MATTER_THREAD_STATE_CHANGE";
+    case MATTER_THREAD_INTERFACE_STATE_CHANGE:
+      return "MATTER_THREAD_INTERFACE_STATE_CHANGE";
+    case MATTER_CHIPOBLE_ADVERTISING_CHANGE:
+      return "MATTER_CHIPOBLE_ADVERTISING_CHANGE";
+    case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
+      return "MATTER_INTERFACE_IP_ADDRESS_CHANGED";
+    case MATTER_COMMISSIONING_COMPLETE:
+      return "MATTER_COMMISSIONING_COMPLETE";
+    case MATTER_FAIL_SAFE_TIMER_EXPIRED:
+      return "MATTER_FAIL_SAFE_TIMER_EXPIRED";
+    case MATTER_OPERATIONAL_NETWORK_ENABLED:
+      return "MATTER_OPERATIONAL_NETWORK_ENABLED";
+    case MATTER_DNSSD_INITIALIZED:
+      return "MATTER_DNSSD_INITIALIZED";
+    case MATTER_DNSSD_RESTART_NEEDED:
+      return "MATTER_DNSSD_RESTART_NEEDED";
+    case MATTER_BINDINGS_CHANGED_VIA_CLUSTER:
+      return "MATTER_BINDINGS_CHANGED_VIA_CLUSTER";
+    case MATTER_OTA_STATE_CHANGED:
+      return "MATTER_OTA_STATE_CHANGED";
+    case MATTER_SERVER_READY:
+      return "MATTER_SERVER_READY";
+    case MATTER_BLE_DEINITIALIZED:
+      return "MATTER_BLE_DEINITIALIZED";
+    case MATTER_COMMISSIONING_SESSION_STARTED:
+      return "MATTER_COMMISSIONING_SESSION_STARTED";
+    case MATTER_COMMISSIONING_SESSION_STOPPED:
+      return "MATTER_COMMISSIONING_SESSION_STOPPED";
+    case MATTER_COMMISSIONING_WINDOW_OPEN:
+      return "MATTER_COMMISSIONING_WINDOW_OPEN";
+    case MATTER_COMMISSIONING_WINDOW_CLOSED:
+      return "MATTER_COMMISSIONING_WINDOW_CLOSED";
+    case MATTER_FABRIC_WILL_BE_REMOVED:
+      return "MATTER_FABRIC_WILL_BE_REMOVED";
+    case MATTER_FABRIC_REMOVED:
+      return "MATTER_FABRIC_REMOVED";
+    case MATTER_FABRIC_COMMITTED:
+      return "MATTER_FABRIC_COMMITTED";
+    case MATTER_FABRIC_UPDATED:
+      return "MATTER_FABRIC_UPDATED";
+    case MATTER_ESP32_PUBLIC_SPECIFIC_EVENT:
+      return "MATTER_ESP32_PUBLIC_SPECIFIC_EVENT";
+    default:
+      return "UNKNOWN_EVENT";
+  }
+}
+
+void matterEventCallback(matterEvent_t event,
+                         const chip::DeviceLayer::ChipDeviceEvent* data) {
+  ESP_LOGW(TAG, "Matter Event: %s (%d)", matterEventToString(event), event);
+  switch (event) {
+    case MATTER_WIFI_CONNECTIVITY_CHANGE:
+      switch (data->WiFiConnectivityChange.Result) {
+        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
+          ESP_LOGW(TAG, "MATTER_WIFI_CONNECTIVITY_CHANGE (Est)");
+          break;
+        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
+          ESP_LOGE(TAG, "MATTER_WIFI_CONNECTIVITY_CHANGE (Lost)");
+          led.setBackground(RgbLed::Color::Red);
+          break;
+        default:
+          break;
+      }
+      break;
+    case MATTER_INTERNET_CONNECTIVITY_CHANGE:
+      switch (data->InternetConnectivityChange.IPv4) {
+        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
+          ESP_LOGW(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Est)");
+          break;
+        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
+          ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Lost)");
+          led.setBackground(RgbLed::Color::Red);
+          break;
+        default:
+          break;
+      }
+      switch (data->InternetConnectivityChange.IPv6) {
+        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
+          ESP_LOGW(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Est)");
+          break;
+        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
+          ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
+          led.setBackground(RgbLed::Color::Red);
+          break;
+        default:
+          break;
+      }
+      break;
+    case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
+      switch (data->InterfaceIpAddressChanged.Type) {
+        case chip::DeviceLayer::InterfaceIpChangeType::kIpV4_Assigned:
+          ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Assigned)");
+          break;
+        case chip::DeviceLayer::InterfaceIpChangeType::kIpV4_Lost:
+          ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Lost)");
+          led.setBackground(RgbLed::Color::Red);
+          break;
+        case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Assigned:
+          ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Assigned)");
+          break;
+        case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Lost:
+          ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Lost)");
+          led.setBackground(RgbLed::Color::Red);
+          break;
+        default:
+          break;
+      }
+      switch (data->InternetConnectivityChange.IPv6) {
+        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
+          ESP_LOGW(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Est)");
+          break;
+        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
+          ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
+          led.setBackground(RgbLed::Color::Red);
+          break;
+        default:
+          break;
+      }
+      break;
+    case MATTER_SERVER_READY:
+      ESP_LOGW(TAG, "MATTER_SERVER_READY");
+      led.setBackground(RgbLed::Color::Blue);
+      break;
+    default:
+      break;
+  }
 }
