@@ -3,6 +3,7 @@
  *
  * Human readable vendor name for the organization responsible for producing the device.
  */
+// #define CHIP_DEVICE_CONFIG_DEVICE_VENDOR_NAME "TEST_VENDOR"
 #define CHIP_DEVICE_CONFIG_DEVICE_VENDOR_NAME "KERI's Lab"
 
 /**
@@ -15,18 +16,15 @@
  * Un-overridden default must match the default test DAC
  * (see src/credentials/examples/DeviceAttestationCredsExample.cpp).
  */
-#ifndef CHIP_DEVICE_CONFIG_DEVICE_VENDOR_ID
-#define CHIP_DEVICE_CONFIG_DEVICE_VENDOR_ID 0xFFF1
-#endif
+// #define CHIP_DEVICE_CONFIG_DEVICE_VENDOR_ID 0xFFF1
+#define CHIP_DEVICE_CONFIG_DEVICE_VENDOR_ID 0xFFF2
 
 /**
  * CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_NAME
  *
  * Human readable name of the device model.
  */
-#ifndef CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_NAME
 #define CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_NAME "KERI's Lab Matter Device"
-#endif
 
 /**
  * CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_ID
@@ -38,18 +36,14 @@
  * or have a DeviceAttestationCredentialsProvider implemented.
  * (see src/credentials/examples/DeviceAttestationCredsExample.cpp)
  */
-#ifndef CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_ID
 #define CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_ID 0x8001
-#endif
 
 /**
  * CHIP_DEVICE_CONFIG_DEFAULT_DEVICE_HARDWARE_VERSION_STRING
  *
  * Human readable string identifying version of the product assigned by the device vendor.
  */
-#ifndef CHIP_DEVICE_CONFIG_DEFAULT_DEVICE_HARDWARE_VERSION_STRING
 #define CHIP_DEVICE_CONFIG_DEFAULT_DEVICE_HARDWARE_VERSION_STRING "0.0.0"
-#endif
 
 /**
  * CHIP_DEVICE_CONFIG_DEFAULT_DEVICE_HARDWARE_VERSION
@@ -64,24 +58,18 @@
  * This is a default value which is used when a hardware version has not been stored in device
  * persistent storage (e.g. by a factory provisioning process).
  */
-#ifndef CHIP_DEVICE_CONFIG_DEFAULT_DEVICE_HARDWARE_VERSION
 #define CHIP_DEVICE_CONFIG_DEFAULT_DEVICE_HARDWARE_VERSION 0
-#endif
 
 /**
  * CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION_STRING
  *
  * A string identifying the software version running on the device.
  */
-#ifndef CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION_STRING
 #define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION_STRING "0.0.0"
-#endif
 
 /**
  * CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION
  *
  * A monothonic number identifying the software version running on the device.
  */
-#ifndef CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION
 #define CHIP_DEVICE_CONFIG_DEVICE_SOFTWARE_VERSION 0
-#endif

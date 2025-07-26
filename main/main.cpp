@@ -1,12 +1,22 @@
 #include <Matter.h>
 
 #include "button.h"
+#include "light_sensor.h"
+#include "pir_sensor.h"
 #include "rgb_led.h"
 
+#define PIN_LIGHT_SENSOR 9
+#define PIN_PIR_SENSOR 10
+
+/* Device */
 Button btn(BOOT_PIN, /* long hold timeout [ms] */ 5000);
 RgbLed led(PIN_RGB_LED);
+LightSensor light_sensor(PIN_LIGHT_SENSOR);
+PirSensor pir_sensor(PIN_PIR_SENSOR, /* clear delay [ms] */ 5000);
 
+/* Matter */
 MatterOccupancySensor matter_occupancy_sensor;
+MatterOnOffPlugin matter_plugin;
 
 static constexpr const char* TAG = "main";
 void matterEventCallback(matterEvent_t,
@@ -22,6 +32,7 @@ void setup() {
 
   /* Matter Endpoint */
   matter_occupancy_sensor.begin();
+  matter_plugin.begin(true);
 
   /* Matter */
   Matter.onEvent(matterEventCallback);
@@ -33,6 +44,7 @@ void setup() {
              Matter.getManualPairingCode().c_str());
     ESP_LOGI(TAG, "Matter QR code URL: %s",
              Matter.getOnboardingQRCodeUrl().c_str());
+    led.blinkOnce(RgbLed::Color::Yellow);
     uint32_t timeCount = 0;
     while (!Matter.isDeviceCommissioned()) {
       delay(100);
@@ -47,6 +59,8 @@ void loop() {
   /* update */
   led.update();
   btn.update();
+  pir_sensor.update();
+  light_sensor.update();
 
   /* button */
   if (btn.pressed()) ESP_LOGI(TAG, "button pressed");
@@ -60,16 +74,49 @@ void loop() {
     Matter.decommission();
   }
 
+  /* enabled */
+  static bool enabled = true;
+  if (btn.pressed()) {
+    enabled = !enabled;
+    matter_plugin.setOnOff(enabled);
+  }
+  enabled = matter_plugin.getOnOff();
+  led.setBackground(enabled ? RgbLed::Color::Blue : RgbLed::Color::Off);
+
+  /* occupancy sensor */
+  bool occupancyState = enabled && pir_sensor.motionDetected();
+  if (matter_occupancy_sensor != occupancyState) {
+    if (occupancyState) {
+      ESP_LOGI(TAG, "Motion detected by PIR sensor");
+      led.blinkOnce(RgbLed::Color::Cyan);
+      matter_occupancy_sensor.setOccupancy(true);
+    } else {
+      ESP_LOGI(TAG, "No motion detected by PIR sensor");
+      led.blinkOnce(RgbLed::Color::Magenta);
+      matter_occupancy_sensor.setOccupancy(false);
+    }
+  }
+
+  /* light sensor */
+  static long ms = millis();
+  if (millis() - ms >= 1000) {
+    ms = millis();
+    ESP_LOGI(TAG, "Light Sensor Value: %f", light_sensor.getNormalized());
+  }
+
+#if 0
   /* oocupancy sensor (dummy) */
   static bool occupancyState = false;
   if (btn.pressed()) {
     occupancyState = !occupancyState;
+    ESP_LOGI(TAG, "Light Sensor Value: %f", light_sensor.getNormalized());
     if (occupancyState)
       led.blinkOnce(RgbLed::Color::Cyan);
     else
       led.blinkOnce(RgbLed::Color::Magenta);
   }
-  matter_occupancy_sensor.setOccupancy(occupancyState);
+  matter_occupancy_sensor.setOccupany(occupancyState);
+#endif
 
   /* wdt release */
   delay(1);

@@ -7,60 +7,23 @@ class RgbLed {
 
   explicit RgbLed(uint8_t pin) : pin_(pin) {}
 
-  void setBackground(uint8_t r, uint8_t g, uint8_t b) {
-    uint8_t total = r + g + b;
-    if (total > 0) {
-      float scale = 32.0f / total;
-      r_ = uint8_t(r * scale);
-      g_ = uint8_t(g * scale);
-      b_ = uint8_t(b * scale);
-    } else {
-      r_ = g_ = b_ = 0;
-    }
-    rgbLedWrite(pin_, r_, g_, b_);
-  }
-
   void setBackground(Color color) {
-    switch (color) {
-      case Color::Off:
-        setBackground(0, 0, 0);
-        break;
-      case Color::Red:
-        setBackground(32, 0, 0);
-        break;
-      case Color::Green:
-        setBackground(0, 32, 0);
-        break;
-      case Color::Blue:
-        setBackground(0, 0, 32);
-        break;
-      case Color::Yellow:
-        setBackground(16, 16, 0);
-        break;
-      case Color::Cyan:
-        setBackground(0, 16, 16);
-        break;
-      case Color::Magenta:
-        setBackground(16, 0, 16);
-        break;
-      case Color::White:
-        setBackground(11, 11, 10);  // 合計32になるよう調整
-        break;
-    }
+    setColor(color, /*is_background=*/true);
   }
 
-  void off() { setBackground(Color::Off); }
+  void off() {
+    setBackground(Color::Off);
+  }
 
   void blinkOnce(Color color, uint16_t durationMs = 500) {
-    blink_color_ = color;
-    blink_duration_ = durationMs;
-    blink_start_ = millis();
+    blinkStart_ = millis();
+    blinkDuration_ = durationMs;
     blinking_ = true;
-    setTemporary(color);
+    setColor(color, /*is_background=*/false);
   }
 
   void update() {
-    if (blinking_ && (millis() - blink_start_ >= blink_duration_)) {
+    if (blinking_ && millis() - blinkStart_ >= blinkDuration_) {
       rgbLedWrite(pin_, r_, g_, b_);
       blinking_ = false;
     }
@@ -73,36 +36,40 @@ class RgbLed {
   uint8_t b_ = 0;
 
   bool blinking_ = false;
-  uint32_t blink_start_ = 0;
-  uint16_t blink_duration_ = 0;
-  Color blink_color_ = Color::Off;
+  uint32_t blinkStart_ = 0;
+  uint16_t blinkDuration_ = 0;
 
-  void setTemporary(Color color) {
+  void setColor(Color color, bool is_background) {
+    uint8_t rawR = 0, rawG = 0, rawB = 0;
     switch (color) {
-      case Color::Off:
-        rgbLedWrite(pin_, 0, 0, 0);
-        break;
-      case Color::Red:
-        rgbLedWrite(pin_, 32, 0, 0);
-        break;
-      case Color::Green:
-        rgbLedWrite(pin_, 0, 32, 0);
-        break;
-      case Color::Blue:
-        rgbLedWrite(pin_, 0, 0, 32);
-        break;
-      case Color::Yellow:
-        rgbLedWrite(pin_, 16, 16, 0);
-        break;
-      case Color::Cyan:
-        rgbLedWrite(pin_, 0, 16, 16);
-        break;
-      case Color::Magenta:
-        rgbLedWrite(pin_, 16, 0, 16);
-        break;
-      case Color::White:
-        rgbLedWrite(pin_, 11, 11, 10);
-        break;
+      case Color::Off:     break;
+      case Color::Red:     rawR = 255; break;
+      case Color::Green:   rawG = 255; break;
+      case Color::Blue:    rawB = 255; break;
+      case Color::Yellow:  rawR = rawG = 255; break;
+      case Color::Cyan:    rawG = rawB = 255; break;
+      case Color::Magenta: rawR = rawB = 255; break;
+      case Color::White:   rawR = rawG = rawB = 255; break;
+    }
+
+    uint8_t total = rawR + rawG + rawB;
+    uint8_t scaledR = 0, scaledG = 0, scaledB = 0;
+    if (total > 0) {
+      float scale = 32.0f / total;
+      scaledR = static_cast<uint8_t>(rawR * scale);
+      scaledG = static_cast<uint8_t>(rawG * scale);
+      scaledB = static_cast<uint8_t>(rawB * scale);
+    }
+
+    if (is_background) {
+      r_ = scaledR;
+      g_ = scaledG;
+      b_ = scaledB;
+      if (!blinking_) {
+        rgbLedWrite(pin_, r_, g_, b_);
+      }
+    } else {
+      rgbLedWrite(pin_, scaledR, scaledG, scaledB);
     }
   }
 };
