@@ -5,11 +5,13 @@
 #include "pir_sensor.h"
 #include "rgb_led.h"
 
+/* Pins */
+#define PIN_BUTTON BOOT_PIN
 #define PIN_LIGHT_SENSOR 9
 #define PIN_PIR_SENSOR 10
 
 /* Device */
-Button btn(BOOT_PIN, /* long hold timeout [ms] */ 5000);
+Button btn(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
 RgbLed led(PIN_RGB_LED);
 LightSensor light_sensor(PIN_LIGHT_SENSOR);
 PirSensor pir_sensor(PIN_PIR_SENSOR, /* clear delay [ms] */ 5000);
@@ -74,17 +76,23 @@ void loop() {
     Matter.decommission();
   }
 
+  /* sensor */
+  bool isDark = light_sensor.getNormalized() < 0.5f;
+  bool isMotionDetected = pir_sensor.motionDetected();
+
   /* enabled */
   static bool enabled = true;
   if (btn.pressed()) {
     enabled = !enabled;
     matter_plugin.setOnOff(enabled);
+    enabled = matter_plugin.getOnOff();
+    ESP_LOGI(TAG, "enabled: %d", enabled);
   }
   enabled = matter_plugin.getOnOff();
   led.setBackground(enabled ? RgbLed::Color::Blue : RgbLed::Color::Off);
 
-  /* occupancy sensor */
-  bool occupancyState = enabled && pir_sensor.motionDetected();
+  /* matter occupancy sensor */
+  bool occupancyState = enabled && isMotionDetected;
   if (matter_occupancy_sensor != occupancyState) {
     if (occupancyState) {
       ESP_LOGI(TAG, "Motion detected by PIR sensor");
@@ -103,20 +111,6 @@ void loop() {
     ms = millis();
     ESP_LOGI(TAG, "Light Sensor Value: %f", light_sensor.getNormalized());
   }
-
-#if 0
-  /* oocupancy sensor (dummy) */
-  static bool occupancyState = false;
-  if (btn.pressed()) {
-    occupancyState = !occupancyState;
-    ESP_LOGI(TAG, "Light Sensor Value: %f", light_sensor.getNormalized());
-    if (occupancyState)
-      led.blinkOnce(RgbLed::Color::Cyan);
-    else
-      led.blinkOnce(RgbLed::Color::Magenta);
-  }
-  matter_occupancy_sensor.setOccupany(occupancyState);
-#endif
 
   /* wdt release */
   delay(1);

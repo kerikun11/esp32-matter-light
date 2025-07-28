@@ -7,13 +7,9 @@ class RgbLed {
 
   explicit RgbLed(uint8_t pin) : pin_(pin) {}
 
-  void setBackground(Color color) {
-    setColor(color, /*is_background=*/true);
-  }
+  void setBackground(Color color) { setColor(color, /*is_background=*/true); }
 
-  void off() {
-    setBackground(Color::Off);
-  }
+  void off() { setBackground(Color::Off); }
 
   void blinkOnce(Color color, uint16_t durationMs = 500) {
     blinkStart_ = millis();
@@ -42,20 +38,35 @@ class RgbLed {
   void setColor(Color color, bool is_background) {
     uint8_t rawR = 0, rawG = 0, rawB = 0;
     switch (color) {
-      case Color::Off:     break;
-      case Color::Red:     rawR = 255; break;
-      case Color::Green:   rawG = 255; break;
-      case Color::Blue:    rawB = 255; break;
-      case Color::Yellow:  rawR = rawG = 255; break;
-      case Color::Cyan:    rawG = rawB = 255; break;
-      case Color::Magenta: rawR = rawB = 255; break;
-      case Color::White:   rawR = rawG = rawB = 255; break;
+      case Color::Off:
+        break;
+      case Color::Red:
+        rawR = 255;
+        break;
+      case Color::Green:
+        rawG = 255;
+        break;
+      case Color::Blue:
+        rawB = 255;
+        break;
+      case Color::Yellow:
+        rawR = rawG = 255;
+        break;
+      case Color::Cyan:
+        rawG = rawB = 255;
+        break;
+      case Color::Magenta:
+        rawR = rawB = 255;
+        break;
+      case Color::White:
+        rawR = rawG = rawB = 255;
+        break;
     }
 
     uint8_t total = rawR + rawG + rawB;
     uint8_t scaledR = 0, scaledG = 0, scaledB = 0;
     if (total > 0) {
-      float scale = 32.0f / total;
+      float scale = 8.0f / total;
       scaledR = static_cast<uint8_t>(rawR * scale);
       scaledG = static_cast<uint8_t>(rawG * scale);
       scaledB = static_cast<uint8_t>(rawB * scale);
