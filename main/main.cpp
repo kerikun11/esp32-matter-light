@@ -127,12 +127,12 @@ void loop() {
   }
 
   /* matter light: matter switch (sync) */
-  static bool last_matter_light = false;
-  if (last_matter_light != matter_light_) {
-    last_matter_light = matter_light_;
-    matter_switch_ = matter_light_;
-    ESP_LOGW(TAG, "Enabled: %d (Matter Light)", matter_switch_.getOnOff());
-  }
+  // static bool last_matter_light = false;
+  // if (last_matter_light != matter_light_) {
+  //   last_matter_light = matter_light_;
+  //   matter_switch_ = matter_light_;
+  //   ESP_LOGW(TAG, "Enabled: %d (Matter Light)", matter_switch_.getOnOff());
+  // }
 
   /* brightness sensor ON: matter switch ON */
   // if (brightness_sensor_.getElapsedSinceChange() > 5000 &&

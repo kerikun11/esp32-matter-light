@@ -5,4 +5,4 @@
 - Software
   - ESP-IDF v5.4.2
 
-![状態遷移図](diagram.dio.svg)
+![状態遷移図](diagram.drawio.svg)
