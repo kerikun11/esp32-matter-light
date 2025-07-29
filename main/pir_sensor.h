@@ -20,7 +20,7 @@ class PirSensor {
     }
   }
 
-  bool motionDetected() const { return motionActive_; }
+  bool getMotionDetected() const { return motionActive_; }
 
  private:
   const uint8_t pin_;

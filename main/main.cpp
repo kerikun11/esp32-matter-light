@@ -20,7 +20,7 @@
 /* Device */
 Button btn_(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
 RgbLed led_(PIN_RGB_LED);
-PirSensor pir_sensor_(PIN_PIR_SENSOR, /* clear delay [ms] */ 30'000);
+PirSensor pir_sensor_(PIN_PIR_SENSOR, /* clear delay [ms] */ 6'000);
 BrightnessSensor brightness_sensor_(PIN_LIGHT_SENSOR);
 IRTransmitter ir_transmitter_(PIN_IR_TRANSMITTER);
 
@@ -122,28 +122,12 @@ void loop() {
 
   /* button: toggle matter switch */
   if (btn_.pressed()) {
-    matter_switch_.toggle();
-    ESP_LOGW(TAG, "Enabled: %d (Button Pressed)", matter_switch_.getOnOff());
+    matter_light_.toggle();
+    ESP_LOGW(TAG, "[Button] MatterLight: %d", matter_light_.getOnOff());
   }
 
-  /* matter light: matter switch (sync) */
-  // static bool last_matter_light = false;
-  // if (last_matter_light != matter_light_) {
-  //   last_matter_light = matter_light_;
-  //   matter_switch_ = matter_light_;
-  //   ESP_LOGW(TAG, "Enabled: %d (Matter Light)", matter_switch_.getOnOff());
-  // }
-
-  /* brightness sensor ON: matter switch ON */
-  // if (brightness_sensor_.getElapsedSinceChange() > 5000 &&
-  //     brightness_sensor_.isBright() && !matter_light_ && !matter_switch_) {
-  //   matter_switch_ = true;
-  //   ESP_LOGW(TAG, "Enabled: %d (Brightness Sensor ON)",
-  //            matter_switch_.getOnOff());
-  // }
-
   /* occupancy sensor: matter switch (sync) */
-  bool occupancy_sensor_state = pir_sensor_.motionDetected();
+  bool occupancy_sensor_state = pir_sensor_.getMotionDetected();
   if (matter_occupancy_sensor_ != occupancy_sensor_state) {
     matter_occupancy_sensor_ = occupancy_sensor_state;
     if (occupancy_sensor_state) {
@@ -154,7 +138,23 @@ void loop() {
       led_.blinkOnce(RgbLed::Color::Cyan);
     }
   }
+
+  /* matter light: matter switch (sync) */
+  static bool last_matter_light = matter_light_;
+  if (last_matter_light != matter_light_) {
+    matter_switch_ = matter_light_;
+    ESP_LOGW(TAG, "Enabled: %d (Matter Light)", matter_switch_.getOnOff());
+  }
   if (matter_switch_) matter_light_ = occupancy_sensor_state;
+  last_matter_light = matter_light_;
+
+  /* brightness sensor ON: matter switch ON */
+  // if (brightness_sensor_.getElapsedSinceChange() > 5000 &&
+  //     brightness_sensor_.isBright() && !matter_light_ && !atter_switch_) {
+  //   matter_switch_ = true;
+  //   ESP_LOGW(TAG, "Enabled: %d (Brightness Sensor ON)",
+  //            matter_switch_.getOnOff());
+  // }
 
   /* Status LED */
   led_.setBackground(matter_switch_ ? RgbLed::Color::White
@@ -165,12 +165,12 @@ void loop() {
   if (light_state_last != matter_light_) {
     light_state_last = matter_light_;
     if (light_state_last) {
-      ESP_LOGW(TAG, "Light ON");
+      ESP_LOGW(TAG, "[IR] Light ON");
       led_.blinkOnce(RgbLed::Color::Green);
       ir_transmitter_.sendRaw(std::vector<uint16_t>(
           std::begin(kIrRawDataLightON1), std::end(kIrRawDataLightON1)));
     } else {
-      ESP_LOGW(TAG, "Light OFF");
+      ESP_LOGW(TAG, "[IR] Light OFF");
       led_.blinkOnce(RgbLed::Color::Green);
       ir_transmitter_.sendRaw(std::vector<uint16_t>(
           std::begin(kIrRawDataLightOFF1), std::end(kIrRawDataLightOFF1)));
