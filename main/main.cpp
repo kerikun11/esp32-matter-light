@@ -123,7 +123,7 @@ void loop() {
   /* button: toggle matter switch */
   if (btn_.pressed()) {
     matter_light_.toggle();
-    ESP_LOGW(TAG, "[Button] MatterLight: %d", matter_light_.getOnOff());
+    ESP_LOGW(TAG, "MatterLight: %d (Button)", matter_light_.getOnOff());
   }
 
   /* occupancy sensor: matter switch (sync) */
@@ -131,10 +131,10 @@ void loop() {
   if (matter_occupancy_sensor_ != occupancy_sensor_state) {
     matter_occupancy_sensor_ = occupancy_sensor_state;
     if (occupancy_sensor_state) {
-      ESP_LOGW(TAG, "[PIR] motion detected");
+      ESP_LOGW(TAG, "[PIR] Motion Detected");
       led_.blinkOnce(RgbLed::Color::Yellow);
     } else {
-      ESP_LOGW(TAG, "[PIR] no motion timeouted");
+      ESP_LOGW(TAG, "[PIR] No Motion Timeout");
       led_.blinkOnce(RgbLed::Color::Cyan);
     }
   }
@@ -143,9 +143,13 @@ void loop() {
   static bool last_matter_light = matter_light_;
   if (last_matter_light != matter_light_) {
     matter_switch_ = matter_light_;
-    ESP_LOGW(TAG, "Enabled: %d (Matter Light)", matter_switch_.getOnOff());
+    ESP_LOGW(TAG, "MatterSwitch: %d (MatterLight)", matter_switch_.getOnOff());
   }
-  if (matter_switch_) matter_light_ = occupancy_sensor_state;
+  if (matter_switch_) {
+    if (matter_light_ != occupancy_sensor_state)
+      ESP_LOGW(TAG, "MatterLight: %d (Switch and PIR)", occupancy_sensor_state);
+    matter_light_ = occupancy_sensor_state;
+  }
   last_matter_light = matter_light_;
 
   /* brightness sensor ON: matter switch ON */
@@ -161,7 +165,7 @@ void loop() {
                                     : RgbLed::Color::Off);
 
   /* IR transmitter */
-  static bool light_state_last = false;
+  static bool light_state_last = !matter_light_;
   if (light_state_last != matter_light_) {
     light_state_last = matter_light_;
     if (light_state_last) {
