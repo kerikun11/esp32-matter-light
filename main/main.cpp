@@ -1,31 +1,74 @@
+/**
+ * @copyright 2025 Ryotaro Onuki
+ * @license LGPL-2.1
+ */
 #include <Matter.h>
 
+#include "brightness_sensor.h"
 #include "button.h"
-#include "light_sensor.h"
+#include "ir_transmitter.h"
 #include "pir_sensor.h"
 #include "rgb_led.h"
 
 /* Pins */
 #define PIN_BUTTON BOOT_PIN
-#define PIN_LIGHT_SENSOR 9
-#define PIN_PIR_SENSOR 10
+#define PIN_PIR_SENSOR 1
+#define PIN_LIGHT_SENSOR 2
+#define PIN_IR_TRANSMITTER 4
+// #define PIN_IR_RECEIVER 5
 
 /* Device */
-Button btn(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
-RgbLed led(PIN_RGB_LED);
-LightSensor light_sensor(PIN_LIGHT_SENSOR);
-PirSensor pir_sensor(PIN_PIR_SENSOR, /* clear delay [ms] */ 5000);
+Button btn_(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
+RgbLed led_(PIN_RGB_LED);
+PirSensor pir_sensor_(PIN_PIR_SENSOR, /* clear delay [ms] */ 30'000);
+BrightnessSensor brightness_sensor_(PIN_LIGHT_SENSOR);
+IRTransmitter ir_transmitter_(PIN_IR_TRANSMITTER);
 
 /* Matter */
-MatterOccupancySensor matter_occupancy_sensor;
-MatterOnOffPlugin matter_plugin;
+MatterOnOffLight matter_light_;
+MatterOnOffPlugin matter_switch_;
+MatterOccupancySensor matter_occupancy_sensor_;
+
+/* IR Data (Tentative) */
+static constexpr uint16_t kIrRawDataLightON1[] = {
+    3519, 1707, 471,  400,  468, 402,  468, 1271, 470, 1271, 471, 400,
+    469,  1271, 470,  401,  469, 400,  468, 400,  469, 1272, 470, 400,
+    470,  399,  469,  1272, 470, 401,  468, 1272, 471, 400,  469, 1272,
+    470,  400,  469,  400,  469, 1272, 470, 401,  469, 400,  469, 400,
+    468,  401,  469,  1272, 470, 401,  468, 1272, 470, 1272, 471, 400,
+    469,  1272, 471,  400,  469, 400,  468, 401,  468, 401,  469, 1272,
+    470,  400,  469,  400,  469, 1272, 471, 400,  469, 401,  469, 65535,
+    0,    9453, 3522, 1709, 470, 401,  469, 400,  469, 1271, 472, 1271,
+    471,  401,  468,  1272, 470, 402,  509, 361,  468, 401,  469, 1272,
+    471,  401,  468,  401,  469, 1272, 470, 401,  469, 1272, 471, 401,
+    469,  1272, 470,  401,  469, 401,  469, 1272, 470, 401,  468, 401,
+    469,  401,  468,  401,  469, 1271, 471, 401,  469, 1273, 470, 1272,
+    470,  402,  468,  1272, 470, 401,  469, 402,  468, 401,  469, 400,
+    469,  1272, 471,  400,  469, 401,  468, 1273, 470, 401,  469, 402,
+    469};
+static constexpr uint16_t kIrRawDataLightOFF1[] = {
+    3520, 1708, 470,  401,  468, 401,  468, 1273, 469, 1272, 470, 401,
+    468,  1271, 471,  400,  469, 400,  468, 401,  468, 1272, 470, 400,
+    469,  401,  468,  1272, 470, 400,  469, 1272, 470, 400,  469, 1273,
+    469,  401,  469,  400,  468, 1273, 469, 401,  468, 401,  468, 401,
+    468,  400,  469,  1272, 470, 1272, 470, 1272, 470, 1272, 470, 400,
+    469,  1271, 470,  400,  469, 400,  469, 400,  469, 1271, 470, 1272,
+    469,  401,  469,  400,  468, 1272, 470, 401,  468, 401,  469, 65535,
+    0,    9427, 3523, 1707, 472, 400,  469, 399,  470, 1271, 470, 1270,
+    472,  399,  470,  1271, 470, 400,  469, 400,  469, 399,  470, 1271,
+    471,  399,  469,  395,  474, 1271, 471, 399,  469, 1272, 470, 401,
+    468,  1271, 471,  399,  470, 399,  470, 1271, 471, 399,  470, 399,
+    469,  400,  469,  400,  469, 1272, 470, 1272, 469, 1272, 471, 1271,
+    471,  400,  469,  1273, 469, 401,  469, 401,  469, 400,  469, 1272,
+    470,  1272, 470,  400,  470, 400,  469, 1270, 472, 400,  468, 402,
+    469};
 
 static constexpr const char* TAG = "main";
 void matterEventCallback(matterEvent_t,
                          const chip::DeviceLayer::ChipDeviceEvent*);
 
 void setup() {
-  led.setBackground(RgbLed::Color::Green);
+  led_.setBackground(RgbLed::Color::Green);
 
   /* Log Levels */
   esp_log_level_set("chip[IM]", ESP_LOG_WARN);
@@ -33,8 +76,9 @@ void setup() {
   esp_log_level_set("ROUTE_HOOK", ESP_LOG_WARN);
 
   /* Matter Endpoint */
-  matter_occupancy_sensor.begin();
-  matter_plugin.begin(true);
+  matter_light_.begin(false);
+  matter_switch_.begin(true);
+  matter_occupancy_sensor_.begin();
 
   /* Matter */
   Matter.onEvent(matterEventCallback);
@@ -46,7 +90,7 @@ void setup() {
              Matter.getManualPairingCode().c_str());
     ESP_LOGI(TAG, "Matter QR code URL: %s",
              Matter.getOnboardingQRCodeUrl().c_str());
-    led.blinkOnce(RgbLed::Color::Yellow);
+    led_.setBackground(RgbLed::Color::Magenta);
     uint32_t timeCount = 0;
     while (!Matter.isDeviceCommissioned()) {
       delay(100);
@@ -59,60 +103,81 @@ void setup() {
 
 void loop() {
   /* update */
-  led.update();
-  btn.update();
-  pir_sensor.update();
-  light_sensor.update();
+  led_.update();
+  btn_.update();
+  pir_sensor_.update();
+  brightness_sensor_.update();
 
-  /* button */
-  if (btn.pressed()) ESP_LOGI(TAG, "button pressed");
-  if (btn.longPressed()) ESP_LOGI(TAG, "button long pressed");
-  if (btn.longHoldStarted()) ESP_LOGI(TAG, "button long hold started");
+  /* button state */
+  if (btn_.pressed()) ESP_LOGI(TAG, "button pressed");
+  if (btn_.longPressed()) ESP_LOGI(TAG, "button long pressed");
+  if (btn_.longHoldStarted()) ESP_LOGI(TAG, "button long hold started");
 
-  /* matter decommissioning */
-  if (btn.longPressed()) {
+  /* button (long hold): matter decommissioning */
+  if (btn_.longPressed()) {
     ESP_LOGI(TAG, "Decommissioning Matter Node...");
-    led.setBackground(RgbLed::Color::Green);
+    led_.setBackground(RgbLed::Color::Magenta);
     Matter.decommission();
   }
 
-  /* sensor */
-  bool isDark = light_sensor.getNormalized() < 0.5f;
-  bool isMotionDetected = pir_sensor.motionDetected();
-
-  /* enabled */
-  static bool enabled = true;
-  if (btn.pressed()) {
-    enabled = !enabled;
-    matter_plugin.setOnOff(enabled);
-    enabled = matter_plugin.getOnOff();
-    ESP_LOGI(TAG, "enabled: %d", enabled);
+  /* button: toggle matter switch */
+  if (btn_.pressed()) {
+    matter_switch_.toggle();
+    ESP_LOGW(TAG, "Enabled: %d (Button Pressed)", matter_switch_.getOnOff());
   }
-  enabled = matter_plugin.getOnOff();
-  led.setBackground(enabled ? RgbLed::Color::Blue : RgbLed::Color::Off);
 
-  /* matter occupancy sensor */
-  bool occupancyState = enabled && isMotionDetected;
-  if (matter_occupancy_sensor != occupancyState) {
-    if (occupancyState) {
-      ESP_LOGI(TAG, "Motion detected by PIR sensor");
-      led.blinkOnce(RgbLed::Color::Cyan);
-      matter_occupancy_sensor.setOccupancy(true);
+  /* matter light: matter switch (sync) */
+  static bool last_matter_light = false;
+  if (last_matter_light != matter_light_) {
+    last_matter_light = matter_light_;
+    matter_switch_ = matter_light_;
+    ESP_LOGW(TAG, "Enabled: %d (Matter Light)", matter_switch_.getOnOff());
+  }
+
+  /* brightness sensor ON: matter switch ON */
+  // if (brightness_sensor_.getElapsedSinceChange() > 5000 &&
+  //     brightness_sensor_.isBright() && !matter_light_ && !matter_switch_) {
+  //   matter_switch_ = true;
+  //   ESP_LOGW(TAG, "Enabled: %d (Brightness Sensor ON)",
+  //            matter_switch_.getOnOff());
+  // }
+
+  /* occupancy sensor: matter switch (sync) */
+  bool occupancy_sensor_state = pir_sensor_.motionDetected();
+  if (matter_occupancy_sensor_ != occupancy_sensor_state) {
+    matter_occupancy_sensor_ = occupancy_sensor_state;
+    if (occupancy_sensor_state) {
+      ESP_LOGW(TAG, "[PIR] motion detected");
+      led_.blinkOnce(RgbLed::Color::Yellow);
     } else {
-      ESP_LOGI(TAG, "No motion detected by PIR sensor");
-      led.blinkOnce(RgbLed::Color::Magenta);
-      matter_occupancy_sensor.setOccupancy(false);
+      ESP_LOGW(TAG, "[PIR] no motion timeouted");
+      led_.blinkOnce(RgbLed::Color::Cyan);
+    }
+  }
+  if (matter_switch_) matter_light_ = occupancy_sensor_state;
+
+  /* Status LED */
+  led_.setBackground(matter_switch_ ? RgbLed::Color::White
+                                    : RgbLed::Color::Off);
+
+  /* IR transmitter */
+  static bool light_state_last = false;
+  if (light_state_last != matter_light_) {
+    light_state_last = matter_light_;
+    if (light_state_last) {
+      ESP_LOGW(TAG, "Light ON");
+      led_.blinkOnce(RgbLed::Color::Green);
+      ir_transmitter_.sendRaw(std::vector<uint16_t>(
+          std::begin(kIrRawDataLightON1), std::end(kIrRawDataLightON1)));
+    } else {
+      ESP_LOGW(TAG, "Light OFF");
+      led_.blinkOnce(RgbLed::Color::Green);
+      ir_transmitter_.sendRaw(std::vector<uint16_t>(
+          std::begin(kIrRawDataLightOFF1), std::end(kIrRawDataLightOFF1)));
     }
   }
 
-  /* light sensor */
-  static long ms = millis();
-  if (millis() - ms >= 1000) {
-    ms = millis();
-    ESP_LOGI(TAG, "Light Sensor Value: %f", light_sensor.getNormalized());
-  }
-
-  /* wdt release */
+  /* WDT Yield */
   delay(1);
 }
 
@@ -200,7 +265,7 @@ void matterEventCallback(matterEvent_t event,
           break;
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
           ESP_LOGE(TAG, "MATTER_WIFI_CONNECTIVITY_CHANGE (Lost)");
-          led.setBackground(RgbLed::Color::Red);
+          led_.setBackground(RgbLed::Color::Red);
           break;
         default:
           break;
@@ -213,7 +278,7 @@ void matterEventCallback(matterEvent_t event,
           break;
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
           ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Lost)");
-          led.setBackground(RgbLed::Color::Red);
+          led_.setBackground(RgbLed::Color::Red);
           break;
         default:
           break;
@@ -224,7 +289,7 @@ void matterEventCallback(matterEvent_t event,
           break;
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
           ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
-          led.setBackground(RgbLed::Color::Red);
+          led_.setBackground(RgbLed::Color::Red);
           break;
         default:
           break;
@@ -237,14 +302,14 @@ void matterEventCallback(matterEvent_t event,
           break;
         case chip::DeviceLayer::InterfaceIpChangeType::kIpV4_Lost:
           ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Lost)");
-          led.setBackground(RgbLed::Color::Red);
+          led_.setBackground(RgbLed::Color::Red);
           break;
         case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Assigned:
           ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Assigned)");
           break;
         case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Lost:
           ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Lost)");
-          led.setBackground(RgbLed::Color::Red);
+          led_.setBackground(RgbLed::Color::Red);
           break;
         default:
           break;
@@ -255,7 +320,7 @@ void matterEventCallback(matterEvent_t event,
           break;
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
           ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
-          led.setBackground(RgbLed::Color::Red);
+          led_.setBackground(RgbLed::Color::Red);
           break;
         default:
           break;
@@ -263,7 +328,7 @@ void matterEventCallback(matterEvent_t event,
       break;
     case MATTER_SERVER_READY:
       ESP_LOGW(TAG, "MATTER_SERVER_READY");
-      led.setBackground(RgbLed::Color::Blue);
+      led_.setBackground(RgbLed::Color::Blue);
       break;
     default:
       break;

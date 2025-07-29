@@ -66,7 +66,7 @@ class RgbLed {
     uint8_t total = rawR + rawG + rawB;
     uint8_t scaledR = 0, scaledG = 0, scaledB = 0;
     if (total > 0) {
-      float scale = 8.0f / total;
+      float scale = 4.0f / total;
       scaledR = static_cast<uint8_t>(rawR * scale);
       scaledG = static_cast<uint8_t>(rawG * scale);
       scaledB = static_cast<uint8_t>(rawB * scale);
