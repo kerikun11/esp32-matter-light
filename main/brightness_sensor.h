@@ -1,3 +1,7 @@
+/**
+ * @copyright 2025 Ryotaro Onuki
+ * @license LGPL-2.1
+ */
 #pragma once
 #include <Arduino.h>
 
@@ -5,7 +9,6 @@ class BrightnessSensor {
  public:
   explicit BrightnessSensor(uint8_t pin) : pin_(pin) {}
 
-  // threshold: 明暗境界、hysteresis: ヒステリシスマージン
   void update(float threshold = 0.5f, float hysteresis = 0.1f) {
     int raw = analogRead(pin_);
     float value = constrain(static_cast<float>(raw) / 1023.0f, 0.0f, 1.0f);
@@ -30,7 +33,6 @@ class BrightnessSensor {
 
   bool isBright() const { return is_bright_; }
 
-  // 状態が変化してからの経過ミリ秒を返す
   unsigned long getElapsedSinceChange() const {
     return millis() - last_change_millis_;
   }

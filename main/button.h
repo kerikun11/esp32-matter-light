@@ -1,3 +1,7 @@
+/**
+ * @copyright 2025 Ryotaro Onuki
+ * @license LGPL-2.1
+ */
 #pragma once
 #include <Arduino.h>
 

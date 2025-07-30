@@ -4,6 +4,7 @@
  */
 #include <Matter.h>
 
+#include "app_log.h"
 #include "brightness_sensor.h"
 #include "button.h"
 #include "ir_transmitter.h"
@@ -79,6 +80,10 @@ void setup() {
   matter_light_.begin(true);
   matter_switch_.begin(true);
   matter_occupancy_sensor_.begin();
+  matter_light_.onChange([](bool new_state) {
+    LOGW("[CB] MatterLight: %d", new_state);
+    return true;
+  });
 
   /* Matter */
   Matter.onEvent(matterEventCallback);
@@ -86,18 +91,16 @@ void setup() {
 
   /* Matter Commissioning */
   if (!Matter.isDeviceCommissioned()) {
-    ESP_LOGI(TAG, "Matter pairing code: %s",
-             Matter.getManualPairingCode().c_str());
-    ESP_LOGI(TAG, "Matter QR code URL: %s",
-             Matter.getOnboardingQRCodeUrl().c_str());
+    LOGI("Matter pairing code: %s", Matter.getManualPairingCode().c_str());
+    LOGI("Matter QR code URL: %s", Matter.getOnboardingQRCodeUrl().c_str());
     led_.setBackground(RgbLed::Color::Magenta);
     uint32_t timeCount = 0;
     while (!Matter.isDeviceCommissioned()) {
       delay(100);
       if ((timeCount++ % 50) == 0)
-        ESP_LOGI(TAG, "Matter commissioning is in progress ...");
+        LOGI("Matter commissioning is in progress ...");
     }
-    ESP_LOGI(TAG, "Matter Node is commissioned successfully.");
+    LOGI("Matter Node is commissioned successfully.");
   }
 }
 
@@ -109,21 +112,23 @@ void loop() {
   brightness_sensor_.update();
 
   /* button state */
-  if (btn_.pressed()) ESP_LOGI(TAG, "[Button] pressed");
-  if (btn_.longPressed()) ESP_LOGI(TAG, "[Button] long pressed");
-  if (btn_.longHoldStarted()) ESP_LOGI(TAG, "[Button] long hold started");
+  if (btn_.pressed()) LOGI("[Button] pressed");
+  if (btn_.longPressed()) LOGI("[Button] long pressed");
+  if (btn_.longHoldStarted()) LOGI("[Button] long hold started");
 
   /* button (long hold): matter decommissioning */
   if (btn_.longPressed()) {
-    ESP_LOGI(TAG, "Decommissioning Matter Node...");
+    LOGI("Decommissioning Matter Node...");
     led_.setBackground(RgbLed::Color::Magenta);
     Matter.decommission();
+    delay(1000);
+    ESP.restart();
   }
 
   /* button: toggle matter switch */
   if (btn_.pressed()) {
     matter_light_.toggle();
-    ESP_LOGW(TAG, "MatterLight: %d (Button)", matter_light_.getOnOff());
+    LOGW("MatterLight: %d (Button)", matter_light_.getOnOff());
   }
 
   /* occupancy sensor: matter switch (sync) */
@@ -131,10 +136,10 @@ void loop() {
   if (matter_occupancy_sensor_ != occupancy_sensor_state) {
     matter_occupancy_sensor_ = occupancy_sensor_state;
     if (occupancy_sensor_state) {
-      ESP_LOGW(TAG, "[PIR] Motion Detected");
+      LOGW("[PIR] Motion Detected");
       led_.blinkOnce(RgbLed::Color::Yellow);
     } else {
-      ESP_LOGW(TAG, "[PIR] No Motion Timeout");
+      LOGW("[PIR] No Motion Timeout");
       led_.blinkOnce(RgbLed::Color::Cyan);
     }
   }
@@ -143,11 +148,11 @@ void loop() {
   static bool last_matter_light = !matter_light_;
   if (last_matter_light != matter_light_) {
     matter_switch_ = matter_light_;
-    ESP_LOGW(TAG, "MatterSwitch: %d (MatterLight)", matter_switch_.getOnOff());
+    LOGW("MatterSwitch: %d (MatterLight)", matter_switch_.getOnOff());
   }
   if (matter_switch_) {
     if (matter_light_ != occupancy_sensor_state)
-      ESP_LOGW(TAG, "MatterLight: %d (Switch and PIR)", occupancy_sensor_state);
+      LOGW("MatterLight: %d (Switch and PIR)", occupancy_sensor_state);
     matter_light_ = occupancy_sensor_state;
   }
   last_matter_light = matter_light_;
@@ -156,7 +161,7 @@ void loop() {
   // if (brightness_sensor_.getElapsedSinceChange() > 5000 &&
   //     brightness_sensor_.isBright() && !matter_light_ && !atter_switch_) {
   //   matter_switch_ = true;
-  //   ESP_LOGW(TAG, "Enabled: %d (Brightness Sensor ON)",
+  //   LOGW("Enabled: %d (Brightness Sensor ON)",
   //            matter_switch_.getOnOff());
   // }
 
@@ -169,12 +174,12 @@ void loop() {
   if (light_state_last != matter_light_) {
     light_state_last = matter_light_;
     if (light_state_last) {
-      ESP_LOGW(TAG, "[IR] Light ON");
+      LOGW("[IR] Light ON");
       led_.blinkOnce(RgbLed::Color::Green);
       ir_transmitter_.sendRaw(std::vector<uint16_t>(
           std::begin(kIrRawDataLightON1), std::end(kIrRawDataLightON1)));
     } else {
-      ESP_LOGW(TAG, "[IR] Light OFF");
+      LOGW("[IR] Light OFF");
       led_.blinkOnce(RgbLed::Color::Green);
       ir_transmitter_.sendRaw(std::vector<uint16_t>(
           std::begin(kIrRawDataLightOFF1), std::end(kIrRawDataLightOFF1)));
@@ -260,15 +265,15 @@ const char* matterEventToString(uint16_t eventType) {
 
 void matterEventCallback(matterEvent_t event,
                          const chip::DeviceLayer::ChipDeviceEvent* data) {
-  ESP_LOGW(TAG, "Matter Event: %s (%d)", matterEventToString(event), event);
+  LOGW("Matter Event: %s (%d)", matterEventToString(event), event);
   switch (event) {
     case MATTER_WIFI_CONNECTIVITY_CHANGE:
       switch (data->WiFiConnectivityChange.Result) {
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
-          ESP_LOGW(TAG, "MATTER_WIFI_CONNECTIVITY_CHANGE (Est)");
+          LOGW("MATTER_WIFI_CONNECTIVITY_CHANGE (Est)");
           break;
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
-          ESP_LOGE(TAG, "MATTER_WIFI_CONNECTIVITY_CHANGE (Lost)");
+          LOGE("MATTER_WIFI_CONNECTIVITY_CHANGE (Lost)");
           led_.setBackground(RgbLed::Color::Red);
           break;
         default:
@@ -278,10 +283,10 @@ void matterEventCallback(matterEvent_t event,
     case MATTER_INTERNET_CONNECTIVITY_CHANGE:
       switch (data->InternetConnectivityChange.IPv4) {
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
-          ESP_LOGW(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Est)");
+          LOGW("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Est)");
           break;
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
-          ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Lost)");
+          LOGE("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Lost)");
           led_.setBackground(RgbLed::Color::Red);
           break;
         default:
@@ -289,10 +294,10 @@ void matterEventCallback(matterEvent_t event,
       }
       switch (data->InternetConnectivityChange.IPv6) {
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
-          ESP_LOGW(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Est)");
+          LOGW("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Est)");
           break;
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
-          ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
+          LOGE("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
           led_.setBackground(RgbLed::Color::Red);
           break;
         default:
@@ -302,17 +307,17 @@ void matterEventCallback(matterEvent_t event,
     case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
       switch (data->InterfaceIpAddressChanged.Type) {
         case chip::DeviceLayer::InterfaceIpChangeType::kIpV4_Assigned:
-          ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Assigned)");
+          LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Assigned)");
           break;
         case chip::DeviceLayer::InterfaceIpChangeType::kIpV4_Lost:
-          ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Lost)");
+          LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Lost)");
           led_.setBackground(RgbLed::Color::Red);
           break;
         case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Assigned:
-          ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Assigned)");
+          LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Assigned)");
           break;
         case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Lost:
-          ESP_LOGW(TAG, "MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Lost)");
+          LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Lost)");
           led_.setBackground(RgbLed::Color::Red);
           break;
         default:
@@ -320,10 +325,10 @@ void matterEventCallback(matterEvent_t event,
       }
       switch (data->InternetConnectivityChange.IPv6) {
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
-          ESP_LOGW(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Est)");
+          LOGW("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Est)");
           break;
         case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
-          ESP_LOGE(TAG, "MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
+          LOGE("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
           led_.setBackground(RgbLed::Color::Red);
           break;
         default:
@@ -331,7 +336,7 @@ void matterEventCallback(matterEvent_t event,
       }
       break;
     case MATTER_SERVER_READY:
-      ESP_LOGW(TAG, "MATTER_SERVER_READY");
+      LOGW("MATTER_SERVER_READY");
       led_.setBackground(RgbLed::Color::Blue);
       break;
     default:
