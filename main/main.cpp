@@ -20,7 +20,7 @@
 /* Device */
 Button btn_(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
 RgbLed led_(PIN_RGB_LED);
-PirSensor pir_sensor_(PIN_PIR_SENSOR, /* clear delay [ms] */ 6'000);
+PirSensor pir_sensor_(PIN_PIR_SENSOR, /* clear delay [ms] */ 60'000);
 BrightnessSensor brightness_sensor_(PIN_LIGHT_SENSOR);
 IRTransmitter ir_transmitter_(PIN_IR_TRANSMITTER);
 
@@ -76,7 +76,7 @@ void setup() {
   esp_log_level_set("ROUTE_HOOK", ESP_LOG_WARN);
 
   /* Matter Endpoint */
-  matter_light_.begin(false);
+  matter_light_.begin(true);
   matter_switch_.begin(true);
   matter_occupancy_sensor_.begin();
 
@@ -109,9 +109,9 @@ void loop() {
   brightness_sensor_.update();
 
   /* button state */
-  if (btn_.pressed()) ESP_LOGI(TAG, "button pressed");
-  if (btn_.longPressed()) ESP_LOGI(TAG, "button long pressed");
-  if (btn_.longHoldStarted()) ESP_LOGI(TAG, "button long hold started");
+  if (btn_.pressed()) ESP_LOGI(TAG, "[Button] pressed");
+  if (btn_.longPressed()) ESP_LOGI(TAG, "[Button] long pressed");
+  if (btn_.longHoldStarted()) ESP_LOGI(TAG, "[Button] long hold started");
 
   /* button (long hold): matter decommissioning */
   if (btn_.longPressed()) {
@@ -140,7 +140,7 @@ void loop() {
   }
 
   /* matter light: matter switch (sync) */
-  static bool last_matter_light = matter_light_;
+  static bool last_matter_light = !matter_light_;
   if (last_matter_light != matter_light_) {
     matter_switch_ = matter_light_;
     ESP_LOGW(TAG, "MatterSwitch: %d (MatterLight)", matter_switch_.getOnOff());
