@@ -22,7 +22,7 @@
     const auto us = micros();                                     \
     fprintf(stdout,                                               \
             c "[" l "][%d.%06d][" __FILE__                        \
-              ":" APP_LOG_TO_STRING(__LINE__) "]\e[0m\t" f "\n",  \
+              ":" APP_LOG_TO_STRING(__LINE__) "]\e[0m " f "\n",   \
             int(us / 1000000), int(us % 1000000), ##__VA_ARGS__); \
   } while (0)
 

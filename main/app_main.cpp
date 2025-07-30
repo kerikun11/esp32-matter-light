@@ -71,11 +71,6 @@ void matterEventCallback(matterEvent_t,
 void setup() {
   led_.setBackground(RgbLed::Color::Green);
 
-  /* Log Levels */
-  esp_log_level_set("chip[IM]", ESP_LOG_WARN);
-  esp_log_level_set("chip[EM]", ESP_LOG_WARN);
-  esp_log_level_set("ROUTE_HOOK", ESP_LOG_WARN);
-
   /* Matter Endpoint */
   matter_light_.begin(true);
   matter_switch_.begin(true);

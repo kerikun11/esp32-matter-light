@@ -3,6 +3,7 @@
 # CONFIG_BOOTLOADER_LOG_LEVEL_ERROR=y (default: info)
 # CONFIG_BT_NIMBLE_LOG_LEVEL_INFO=y (default: info)
 CONFIG_ARDUHAL_LOG_DEFAULT_LEVEL_INFO=y # (default: error)
+CONFIG_CHIP_LOG_DEFAULT_LEVEL_ERROR=y # (default: progress)
 
 # Chip Configuration
 CONFIG_FLASHMODE_QIO=y
