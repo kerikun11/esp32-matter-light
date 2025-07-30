@@ -33,7 +33,7 @@ class BrightnessSensor {
 
   bool isBright() const { return is_bright_; }
 
-  unsigned long getElapsedSinceChange() const {
+  unsigned long getMillisSinceChange() const {
     return millis() - last_change_millis_;
   }
 

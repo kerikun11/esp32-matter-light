@@ -8,20 +8,24 @@
 #include "brightness_sensor.h"
 #include "button.h"
 #include "ir_transmitter.h"
-#include "pir_sensor.h"
+#include "motion_sensor.h"
 #include "rgb_led.h"
 
 /* Pins */
 #define PIN_BUTTON BOOT_PIN
-#define PIN_PIR_SENSOR 1
+#define PIN_MOTION_SENSOR 1
 #define PIN_LIGHT_SENSOR 2
 #define PIN_IR_TRANSMITTER 4
 // #define PIN_IR_RECEIVER 5
 
+// #define LIGHT_OFF_TIMEOUT_SECONDS (60 * 5)  // 5 minutes
+#define LIGHT_OFF_TIMEOUT_SECONDS 10
+#define OCCUPANCY_TIMEOUT_SECONDS 3
+
 /* Device */
 Button btn_(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
 RgbLed led_(PIN_RGB_LED);
-PirSensor pir_sensor_(PIN_PIR_SENSOR, /* clear delay [ms] */ 60'000);
+MotionSensor motion_sensor_(PIN_MOTION_SENSOR);
 BrightnessSensor brightness_sensor_(PIN_LIGHT_SENSOR);
 IRTransmitter ir_transmitter_(PIN_IR_TRANSMITTER);
 
@@ -96,14 +100,13 @@ void setup() {
 }
 
 void loop() {
-  static bool last_matter_light = !matter_light_;
-  static bool light_state_last = !matter_light_;
-  static uint64_t last_matter_light_update_ms = 0;
+  static bool last_matter_light = matter_light_;
+  static bool light_state_last = !matter_light_;  //< update first time
+  static uint64_t last_matter_light_change_ms = 0;
 
   /* update */
   led_.update();
   btn_.update();
-  pir_sensor_.update();
   brightness_sensor_.update();
 
   /* button state */
@@ -126,43 +129,36 @@ void loop() {
     LOGW("MatterLight: %d (Button)", matter_light_.getOnOff());
   }
 
+  /* occupancy sensor */
+  int seconds_since_last_motion = motion_sensor_.getSecondsSinceLastMotion();
+  bool occupancy_state = seconds_since_last_motion < OCCUPANCY_TIMEOUT_SECONDS;
+
   /* matter light changed: sync matter switch */
-  bool occupancy_sensor_state = pir_sensor_.getMotionDetected();
   if (last_matter_light != matter_light_) {
     matter_switch_ = matter_light_;
     LOGW("MatterSwitch: %d (MatterLight)", matter_switch_.getOnOff());
-    if (matter_light_ && !occupancy_sensor_state) {
-      matter_switch_ = false;
-      LOGW("MatterSwitch: %d (No Motion)", matter_switch_.getOnOff());
-    }
-    if (!matter_light_ && !occupancy_sensor_state) {
-      matter_switch_ = true;
+    if (!occupancy_state) {
+      matter_switch_ = !matter_light_;
       LOGW("MatterSwitch: %d (No Motion)", matter_switch_.getOnOff());
     }
   }
 
   /* matter switch enabled: sync matter light to occupancy sensor */
   if (matter_switch_) {
-    if (matter_light_ != occupancy_sensor_state)
-      LOGW("MatterLight: %d (Occupancy Sensor)", occupancy_sensor_state);
-    matter_light_ = occupancy_sensor_state;
+    if (!matter_light_ && occupancy_state) {
+      matter_light_ = true;
+      LOGW("MatterLight: %d (Occupancy Sensor)", matter_light_.getOnOff());
+    }
+    if (matter_light_ &&
+        seconds_since_last_motion > LIGHT_OFF_TIMEOUT_SECONDS) {
+      matter_light_ = false;
+      LOGW("MatterLight: %d (Occupancy Sensor)", matter_light_.getOnOff());
+    }
   }
   last_matter_light = matter_light_;
 
-  /* matter occupancy sensor: sync occuancy sensor state */
-  if (matter_occupancy_sensor_ != occupancy_sensor_state) {
-    matter_occupancy_sensor_ = occupancy_sensor_state;
-    if (occupancy_sensor_state) {
-      LOGW("[PIR] Motion Detected");
-      if (matter_switch_) led_.blinkOnce(RgbLed::Color::Yellow);
-    } else {
-      LOGW("[PIR] No Motion Timeout");
-      if (matter_switch_) led_.blinkOnce(RgbLed::Color::Cyan);
-    }
-  }
-
   /* auto matter switch ON */
-  if (last_matter_light_update_ms > 11 * 60 * 60 * 1000) {
+  if (last_matter_light_change_ms > 11 * 60 * 60 * 1000) {
     if (!matter_switch_) {
       matter_switch_ = true;
       LOGW("MatterSwitch: %d (Auto ON after 10 hours)",
@@ -171,12 +167,24 @@ void loop() {
   }
 
   /* brightness sensor */
-  // if (brightness_sensor_.getElapsedSinceChange() > 5000 &&
+  // if (brightness_sensor_.getMillisSinceChange() > 5000 &&
   //     brightness_sensor_.isBright() && !matter_light_ && !atter_switch_) {
   //   matter_switch_ = true;
   //   LOGW("Enabled: %d (Brightness Sensor ON)",
   //            matter_switch_.getOnOff());
   // }
+
+  /* matter occupancy sensor */
+  if (matter_occupancy_sensor_ != occupancy_state) {
+    matter_occupancy_sensor_ = occupancy_state;
+    if (occupancy_state) {
+      LOGW("[PIR] Motion Detected");
+      if (matter_switch_) led_.blinkOnce(RgbLed::Color::Yellow);
+    } else {
+      LOGW("[PIR] No Motion Timeout");
+      if (matter_switch_) led_.blinkOnce(RgbLed::Color::Cyan);
+    }
+  }
 
   /* Status LED */
   led_.setBackground(matter_switch_ ? RgbLed::Color::White
@@ -185,7 +193,7 @@ void loop() {
   /* IR transmitter */
   if (light_state_last != matter_light_) {
     light_state_last = matter_light_;
-    last_matter_light_update_ms = millis();
+    last_matter_light_change_ms = millis();
     if (light_state_last) {
       LOGW("[IR] Light ON");
       led_.blinkOnce(RgbLed::Color::Green);
