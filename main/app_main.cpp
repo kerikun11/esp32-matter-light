@@ -18,8 +18,8 @@
 #define PIN_IR_TRANSMITTER 4
 // #define PIN_IR_RECEIVER 5
 
-// #define LIGHT_OFF_TIMEOUT_SECONDS (60 * 5)  // 5 minutes
-#define LIGHT_OFF_TIMEOUT_SECONDS 10
+#define LIGHT_OFF_TIMEOUT_SECONDS (60 * 5)  // 5 minutes
+// #define LIGHT_OFF_TIMEOUT_SECONDS 10
 #define OCCUPANCY_TIMEOUT_SECONDS 3
 
 /* Device */
