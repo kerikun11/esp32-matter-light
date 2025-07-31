@@ -1,6 +1,6 @@
 /**
  * @copyright 2025 Ryotaro Onuki
- * @license LGPL-2.1
+ * SPDX-License-Identifier: LGPL-2.1
  */
 #pragma once
 

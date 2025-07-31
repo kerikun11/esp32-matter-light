@@ -1,8 +1,6 @@
 /**
- * @file app_log.h
- * @brief this provides logging formats
- * @author Ryotaro Onuki <kerikun11+github@gmail.com>
- * @date 2018-12-18
+ * @copyright 2025 Ryotaro Onuki
+ * SPDX-License-Identifier: LGPL-2.1
  */
 #pragma once
 

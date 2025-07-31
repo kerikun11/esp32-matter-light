@@ -1,6 +1,6 @@
 /**
  * @copyright 2025 Ryotaro Onuki
- * @license LGPL-2.1
+ * SPDX-License-Identifier: LGPL-2.1
  */
 #include <Matter.h>
 #include <Preferences.h>
@@ -256,21 +256,6 @@ void loop() {
     }
   }
 
-  /* brightness sensor */
-  // static long ms = millis();
-  // if (millis() - ms >= 1000) {
-  //   ms = millis();
-  //   ESP_LOGI(TAG, "Brightness Sensor Value: %f",
-  //            brightness_sensor_.getNormalized());
-  // }
-  /* brightness sensor */
-  // if (matter_light_ && millis() - last_matter_light_change_ms > 5000 &&
-  //     !brightness_sensor_.isBright() &&
-  //     brightness_sensor_.getMillisSinceChange() > 5000) {
-  //   matter_light_ = false;
-  //   LOGW("MatterLight: %d (Brightness Sensor)", matter_light_.getOnOff());
-  // }
-
   /* matter occupancy sensor */
   if (last_occupancy_state != occupancy_state) {
     last_occupancy_state = occupancy_state;
@@ -311,13 +296,6 @@ void loop() {
   } else {
     led_.setBackground(RgbLed::Color::Off);
   }
-
-  /* IR Receiver */
-  // if (ir_remote_.available()) {
-  //   auto ir_data = ir_remote_.get();
-  //   LOGI("[IR] Received: %d data", ir_data.size());
-  //   ir_remote_.clear();
-  // }
 
   /* Command Parser */
   handle_commands();
