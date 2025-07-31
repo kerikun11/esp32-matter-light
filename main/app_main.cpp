@@ -3,11 +3,13 @@
  * @license LGPL-2.1
  */
 #include <Matter.h>
+#include <Preferences.h>
 
 #include "app_log.h"
 #include "brightness_sensor.h"
 #include "button.h"
-#include "ir_transmitter.h"
+#include "command_parser.h"
+#include "ir_remote.h"
 #include "motion_sensor.h"
 #include "rgb_led.h"
 
@@ -16,7 +18,7 @@
 #define PIN_MOTION_SENSOR 1
 #define PIN_LIGHT_SENSOR 2
 #define PIN_IR_TRANSMITTER 4
-// #define PIN_IR_RECEIVER 5
+#define PIN_IR_RECEIVER 5
 
 #define LIGHT_OFF_TIMEOUT_SECONDS (60 * 5)  // 5 minutes
 // #define LIGHT_OFF_TIMEOUT_SECONDS 10
@@ -27,53 +29,113 @@ Button btn_(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
 RgbLed led_(PIN_RGB_LED);
 MotionSensor motion_sensor_(PIN_MOTION_SENSOR);
 BrightnessSensor brightness_sensor_(PIN_LIGHT_SENSOR);
-IRTransmitter ir_transmitter_(PIN_IR_TRANSMITTER);
+IRRemote ir_remote_;
 
 /* Matter */
 MatterOnOffLight matter_light_;
 MatterOnOffPlugin matter_switch_;
 MatterOccupancySensor matter_occupancy_sensor_;
 
-/* IR Data (Tentative) */
-static constexpr uint16_t kIrRawDataLightON1[] = {
-    3519, 1707, 471,  400,  468, 402,  468, 1271, 470, 1271, 471, 400,
-    469,  1271, 470,  401,  469, 400,  468, 400,  469, 1272, 470, 400,
-    470,  399,  469,  1272, 470, 401,  468, 1272, 471, 400,  469, 1272,
-    470,  400,  469,  400,  469, 1272, 470, 401,  469, 400,  469, 400,
-    468,  401,  469,  1272, 470, 401,  468, 1272, 470, 1272, 471, 400,
-    469,  1272, 471,  400,  469, 400,  468, 401,  468, 401,  469, 1272,
-    470,  400,  469,  400,  469, 1272, 471, 400,  469, 401,  469, 65535,
-    0,    9453, 3522, 1709, 470, 401,  469, 400,  469, 1271, 472, 1271,
-    471,  401,  468,  1272, 470, 402,  509, 361,  468, 401,  469, 1272,
-    471,  401,  468,  401,  469, 1272, 470, 401,  469, 1272, 471, 401,
-    469,  1272, 470,  401,  469, 401,  469, 1272, 470, 401,  468, 401,
-    469,  401,  468,  401,  469, 1271, 471, 401,  469, 1273, 470, 1272,
-    470,  402,  468,  1272, 470, 401,  469, 402,  468, 401,  469, 400,
-    469,  1272, 471,  400,  469, 401,  468, 1273, 470, 401,  469, 402,
-    469};
-static constexpr uint16_t kIrRawDataLightOFF1[] = {
-    3520, 1708, 470,  401,  468, 401,  468, 1273, 469, 1272, 470, 401,
-    468,  1271, 471,  400,  469, 400,  468, 401,  468, 1272, 470, 400,
-    469,  401,  468,  1272, 470, 400,  469, 1272, 470, 400,  469, 1273,
-    469,  401,  469,  400,  468, 1273, 469, 401,  468, 401,  468, 401,
-    468,  400,  469,  1272, 470, 1272, 470, 1272, 470, 1272, 470, 400,
-    469,  1271, 470,  400,  469, 400,  469, 400,  469, 1271, 470, 1272,
-    469,  401,  469,  400,  468, 1272, 470, 401,  468, 401,  469, 65535,
-    0,    9427, 3523, 1707, 472, 400,  469, 399,  470, 1271, 470, 1270,
-    472,  399,  470,  1271, 470, 400,  469, 400,  469, 399,  470, 1271,
-    471,  399,  469,  395,  474, 1271, 471, 399,  469, 1272, 470, 401,
-    468,  1271, 471,  399,  470, 399,  470, 1271, 471, 399,  470, 399,
-    469,  400,  469,  400,  469, 1272, 470, 1272, 469, 1272, 471, 1271,
-    471,  400,  469,  1273, 469, 401,  469, 401,  469, 400,  469, 1272,
-    470,  1272, 470,  400,  470, 400,  469, 1270, 472, 400,  468, 402,
-    469};
+/* Preferences */
+Preferences prefs_;
+static int light_off_timeout_seconds_;
+static std::vector<uint16_t> ir_data_light_on_;
+static std::vector<uint16_t> ir_data_light_off_;
+
+/* Serial */
+CommandParser command_parser_(Serial);
 
 static constexpr const char* TAG = "main";
 void matterEventCallback(matterEvent_t,
                          const chip::DeviceLayer::ChipDeviceEvent*);
 
+void errorHandler(const char* file, int line, const char* func,
+                  const char* message) {
+  LOGE("Error in %s:%d (%s): %s", file, line, func, message);
+  led_.setBackground(RgbLed::Color::Red);
+  delay(1000);
+  ESP.restart();
+}
+
+void handle_commands() {
+  if (!command_parser_.available()) return;
+  const auto& tokens = command_parser_.get();
+  if (tokens.empty()) return;
+  const auto& command = tokens[0];
+  LOGI("command: %s", command.c_str());
+  if (command == "help") {
+    LOGI("Available Commands:");
+    LOGI("  help - Show this help");
+    LOGI("  record <on|off> - Record IR data for Light ON/OFF");
+    LOGI("  timeout <seconds> - Set light OFF timeout in seconds");
+  } else if (command == "record") {
+    if (tokens.size() < 2) {
+      LOGE("Usage: record <on|off>");
+      return;
+    }
+    ir_remote_.clear();
+    while (!ir_remote_.available()) {
+      led_.blinkOnce(RgbLed::Color::Green);
+      ir_remote_.handle();
+      delay(100);
+    }
+    const auto& ir_data = ir_remote_.get();
+    if (tokens[1] == "on") {
+      ir_data_light_on_ = ir_data;
+      prefs_.putBytes("ir_L1", ir_data_light_on_.data(),
+                      ir_data_light_on_.size() * sizeof(uint16_t));
+      LOGI("Recorded IR data for Light ON (%zu)", ir_data_light_on_.size());
+    } else if (tokens[1] == "off") {
+      ir_data_light_off_ = ir_data;
+      prefs_.putBytes("ir_L0", ir_data_light_off_.data(),
+                      ir_data_light_off_.size() * sizeof(uint16_t));
+      LOGI("Recorded IR data for Light OFF (%zu)", ir_data_light_off_.size());
+    } else {
+      LOGE("Invalid argument: %s", tokens[1].c_str());
+    }
+  } else if (command == "timeout") {
+    if (tokens.size() < 2) {
+      LOGE("Usage: timeout <seconds>");
+      return;
+    }
+    int seconds = atoi(tokens[1].c_str());
+    if (seconds <= 0) {
+      LOGE("Invalid timeout value: %d", seconds);
+      return;
+    }
+    light_off_timeout_seconds_ = seconds;
+    prefs_.putInt("timout", light_off_timeout_seconds_);
+    LOGW("Light OFF Timeout set to %d seconds", light_off_timeout_seconds_);
+  } else {
+    LOGE("Unknown command: %s", command.c_str());
+  }
+}
+
 void setup() {
   led_.setBackground(RgbLed::Color::Green);
+
+  /* CommandReceiver */
+  Serial.begin(CONFIG_CONSOLE_UART_BAUDRATE);
+
+  /* Preferences */
+  prefs_.begin("matter");
+
+  /* Preferences (Light OFF Timeout) */
+  light_off_timeout_seconds_ =
+      prefs_.getInt("timeout", LIGHT_OFF_TIMEOUT_SECONDS);
+
+  /* Preferences (IR Data) */
+  ir_data_light_on_.resize(prefs_.getBytesLength("ir_L1"));
+  prefs_.getBytes("ir_L1", ir_data_light_on_.data(),
+                  ir_data_light_on_.size() * sizeof(uint16_t));
+  LOGI("IR Data Light ON: %zu", ir_data_light_on_.size());
+  ir_data_light_off_.resize(prefs_.getBytesLength("ir_L0"));
+  prefs_.getBytes("ir_L0", ir_data_light_off_.data(),
+                  ir_data_light_off_.size() * sizeof(uint16_t));
+  LOGI("IR Data Light OFF: %zu", ir_data_light_off_.size());
+
+  /* IR */
+  ir_remote_.begin(PIN_IR_TRANSMITTER, PIN_IR_RECEIVER);
 
   /* Matter Endpoint */
   matter_light_.begin(true);
@@ -107,6 +169,8 @@ void loop() {
   /* update */
   led_.update();
   btn_.update();
+  // ir_remote_.handle();
+  command_parser_.update();
   brightness_sensor_.update();
 
   /* button state */
@@ -150,7 +214,7 @@ void loop() {
       LOGW("MatterLight: %d (Occupancy Sensor)", matter_light_.getOnOff());
     }
     if (matter_light_ &&
-        seconds_since_last_motion > LIGHT_OFF_TIMEOUT_SECONDS) {
+        seconds_since_last_motion > light_off_timeout_seconds_) {
       matter_light_ = false;
       LOGW("MatterLight: %d (Occupancy Sensor)", matter_light_.getOnOff());
     }
@@ -197,15 +261,23 @@ void loop() {
     if (light_state_last) {
       LOGW("[IR] Light ON");
       led_.blinkOnce(RgbLed::Color::Green);
-      ir_transmitter_.sendRaw(std::vector<uint16_t>(
-          std::begin(kIrRawDataLightON1), std::end(kIrRawDataLightON1)));
+      ir_remote_.send(ir_data_light_on_);
     } else {
       LOGW("[IR] Light OFF");
       led_.blinkOnce(RgbLed::Color::Green);
-      ir_transmitter_.sendRaw(std::vector<uint16_t>(
-          std::begin(kIrRawDataLightOFF1), std::end(kIrRawDataLightOFF1)));
+      ir_remote_.send(ir_data_light_off_);
     }
   }
+
+  /* IR Receiver */
+  // if (ir_remote_.available()) {
+  //   auto ir_data = ir_remote_.get();
+  //   LOGI("[IR] Received: %d data", ir_data.size());
+  //   ir_remote_.clear();
+  // }
+
+  /* Command Parser */
+  handle_commands();
 
   /* WDT Yield */
   delay(1);
