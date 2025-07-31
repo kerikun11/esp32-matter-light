@@ -1,0 +1,18 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/arm-none-eabi-gcc",
+            "cStandard": "gnu23",
+            "intelliSenseMode": "gcc-arm",
+            "compileCommands": [
+                "build/compile_commands.json"
+            ]
+        }
+    ],
+    "version": 4
+}

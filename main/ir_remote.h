@@ -45,10 +45,10 @@ class IRRemote {
 void IRRemote::begin(int tx, int rx) {
   pin_tx_ = tx;
   pin_rx_ = rx;
-  ledcAttach(tx, 38000, 8);
-  ledcWrite(tx, 0);
-  pinMode(rx, INPUT);
-  attachInterruptArg(rx, isrEntryPoint, this, CHANGE);
+  pinMode(pin_tx_, OUTPUT);
+  pinMode(pin_rx_, INPUT);
+  digitalWrite(pin_tx_, LOW);
+  attachInterruptArg(pin_rx_, isrEntryPoint, this, CHANGE);
   state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
 }
 
@@ -74,13 +74,16 @@ void IRRemote::send(const std::vector<uint16_t>& data) {
   {
     enum IR_RECEIVER_STATE state_cache = state_;
     state_ = IR_RECEIVER_STATE::IR_RECEIVER_OFF;
-    bool mark = true;
-    for (uint16_t duration_us : data) {
-      ledcWrite(pin_tx_, mark ? 128 : 0);
-      delayMicroseconds(duration_us);
-      mark = !mark;
+    for (uint16_t count = 0; count < data.size(); count++) {
+      uint64_t us = micros();
+      uint16_t time = data[count];
+      do {
+        digitalWrite(pin_tx_, !(count & 1));
+        delayMicroseconds(8);
+        digitalWrite(pin_tx_, 0);
+        delayMicroseconds(16);
+      } while (int32_t(us + time - micros()) > 0);
     }
-    ledcWrite(pin_tx_, 0);
     state_ = state_cache;
   }
   interrupts();

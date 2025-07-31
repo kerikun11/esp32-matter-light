@@ -59,9 +59,10 @@ void handle_commands() {
   LOGI("command: %s", command.c_str());
   if (command == "help") {
     LOGI("Available Commands:");
-    LOGI("  help - Show this help");
-    LOGI("  record <on|off> - Record IR data for Light ON/OFF");
-    LOGI("  timeout <seconds> - Set light OFF timeout in seconds");
+    LOGI("- help              : Show this help");
+    LOGI("- record <on|off>   : Record IR data for Light ON/OFF");
+    LOGI("- timeout <seconds> : Set light OFF timeout in seconds (current: %d)",
+         light_off_timeout_seconds_);
   } else if (command == "record") {
     if (tokens.size() < 2) {
       LOGE("Usage: record <on|off>");
@@ -109,7 +110,7 @@ void setup() {
   led_.setBackground(RgbLed::Color::Green);
 
   /* CommandReceiver */
-  Serial.begin(CONFIG_CONSOLE_UART_BAUDRATE);
+  Serial.begin(CONFIG_MONITOR_BAUD);
 
   /* Preferences */
   prefs_.begin(PREFERENCES_PARTITION_LABEL);
@@ -231,6 +232,13 @@ void loop() {
   //   LOGW("Enabled: %d (Brightness Sensor ON)",
   //            matter_switch_.getOnOff());
   // }
+  /* brightness sensor */
+  static long ms = millis();
+  if (millis() - ms >= 1000) {
+    ms = millis();
+    ESP_LOGI(TAG, "Brightness Sensor Value: %f",
+             brightness_sensor_.getNormalized());
+  }
 
   /* matter occupancy sensor */
   if (matter_occupancy_sensor_ != occupancy_state) {
