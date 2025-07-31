@@ -24,16 +24,16 @@ IRRemote ir_remote_;
 /* Matter */
 MatterOnOffLight matter_light_;
 MatterOnOffPlugin matter_motion_switch_;
-MatterOnOffPlugin matter_brightness_switch_;
-MatterOccupancySensor matter_occupancy_sensor_;
 
 /* Preferences */
 Preferences prefs_;
 static const char* PREFERENCES_PARTITION_LABEL = "matter";
 static const char* PREFERENCES_KEY_TIMEOUT = "timeout";
+static const char* PREFERENCES_KEY_AMBIENT = "ambient";
 static const char* PREFERENCES_KEY_IR_ON = "ir_on";
 static const char* PREFERENCES_KEY_IR_OFF = "ir_off";
-static int light_off_timeout_seconds_ = LIGHT_OFF_TIMEOUT_SECONDS;
+static int light_off_timeout_seconds_;
+static bool ambient_light_mode_enabled_;
 static std::vector<uint16_t> ir_data_light_on_;
 static std::vector<uint16_t> ir_data_light_off_;
 
@@ -65,6 +65,8 @@ static void handle_commands() {
     LOGI("- record <on|off>   : Record IR data for Light ON/OFF");
     LOGI("- timeout <seconds> : Set light OFF timeout in seconds (current: %d)",
          light_off_timeout_seconds_);
+    LOGI("- ambient <on|off>  : Ambient Light Mode (current: %s)",
+         ambient_light_mode_enabled_ ? "on" : "off");
   } else if (command == "info" || command == "i") {
     LOGI("Brightness Sensor Value: %f", brightness_sensor_.getNormalized());
   } else if (command == "record" || command == "r") {
@@ -105,17 +107,34 @@ static void handle_commands() {
     light_off_timeout_seconds_ = seconds;
     prefs_.putInt(PREFERENCES_KEY_TIMEOUT, light_off_timeout_seconds_);
     LOGW("Light OFF Timeout set to %d seconds", light_off_timeout_seconds_);
+  } else if (command == "ambient" || command == "a") {
+    if (tokens.size() < 2) {
+      LOGE("Usage: ambient <on|off>");
+      return;
+    }
+    if (tokens[1] == "on") {
+      ambient_light_mode_enabled_ = true;
+      LOGW("Ambient Light Mode Enabled");
+    } else if (tokens[1] == "off") {
+      ambient_light_mode_enabled_ = false;
+      LOGW("Ambient Light Mode Disabled");
+    } else {
+      LOGE("Invalid argument: %s", tokens[1].c_str());
+      return;
+    }
+    prefs_.putBool(PREFERENCES_KEY_AMBIENT, ambient_light_mode_enabled_);
   } else {
     LOGE("Unknown command: %s", command.c_str());
   }
 }
 
-static void setupPreferences() {
+static void loadPreferences() {
   prefs_.begin(PREFERENCES_PARTITION_LABEL);
 
   /* Preferences (Light OFF Timeout) */
   light_off_timeout_seconds_ =
-      prefs_.getInt("timeout", LIGHT_OFF_TIMEOUT_SECONDS);
+      prefs_.getInt(PREFERENCES_KEY_TIMEOUT, LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT);
+  ambient_light_mode_enabled_ = prefs_.getBool(PREFERENCES_KEY_AMBIENT, true);
 
   /* Preferences (IR Data) */
   ir_data_light_on_.resize(prefs_.getBytesLength(PREFERENCES_KEY_IR_ON));
@@ -135,7 +154,7 @@ void setup() {
   Serial.begin(CONFIG_MONITOR_BAUD);
 
   /* Preferences */
-  setupPreferences();
+  loadPreferences();
 
   /* IR */
   ir_remote_.begin(PIN_IR_TRANSMITTER, PIN_IR_RECEIVER);
@@ -143,8 +162,6 @@ void setup() {
   /* Matter Endpoints */
   matter_light_.begin(true);
   matter_motion_switch_.begin(true);
-  matter_brightness_switch_.begin(true);
-  matter_occupancy_sensor_.begin();
 
   /* Matter */
   Matter.onEvent(matterEventCallback);
@@ -169,6 +186,7 @@ void loop() {
   static bool last_matter_light = matter_light_;
   static bool light_state_last = !matter_light_;  //< update first time
   static uint64_t last_matter_light_change_ms = 0;
+  static bool last_occupancy_state = false;
 
   /* update */
   led_.update();
@@ -216,7 +234,7 @@ void loop() {
   if (matter_motion_switch_) {
     /* Light ON */
     if (!matter_light_ && occupancy_state &&
-        (!matter_brightness_switch_ || !brightness_sensor_.isBright())) {
+        (!ambient_light_mode_enabled_ || !brightness_sensor_.isBright())) {
       matter_light_ = true;
       LOGW("MatterLight: %d (Occupancy Sensor)", matter_light_.getOnOff());
     }
@@ -254,8 +272,8 @@ void loop() {
   // }
 
   /* matter occupancy sensor */
-  if (matter_occupancy_sensor_ != occupancy_state) {
-    matter_occupancy_sensor_ = occupancy_state;
+  if (last_occupancy_state != occupancy_state) {
+    last_occupancy_state = occupancy_state;
     if (occupancy_state) {
       LOGW("[PIR] Motion Detected");
       if (matter_motion_switch_) led_.blinkOnce(RgbLed::Color::Blue);
@@ -282,7 +300,7 @@ void loop() {
 
   /* Status LED */
   if (matter_motion_switch_) {
-    if (!matter_light_ && matter_brightness_switch_ &&
+    if (!matter_light_ && ambient_light_mode_enabled_ &&
         brightness_sensor_.isBright()) {
       led_.setBackground(RgbLed::Color::Yellow);
     } else if (occupancy_state) {

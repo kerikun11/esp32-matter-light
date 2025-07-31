@@ -19,5 +19,5 @@
 #endif
 
 /* Timeout */
-#define LIGHT_OFF_TIMEOUT_SECONDS (5 * 60)  // 5 minutes
+#define LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT (5 * 60)  // 5 minutes
 #define OCCUPANCY_TIMEOUT_SECONDS 3
