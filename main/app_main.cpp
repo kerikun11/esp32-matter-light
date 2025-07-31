@@ -5,6 +5,7 @@
 #include <Matter.h>
 #include <Preferences.h>
 
+#include "app_config.h"
 #include "app_log.h"
 #include "brightness_sensor.h"
 #include "button.h"
@@ -12,17 +13,6 @@
 #include "ir_remote.h"
 #include "motion_sensor.h"
 #include "rgb_led.h"
-
-/* Pins */
-#define PIN_BUTTON BOOT_PIN
-#define PIN_MOTION_SENSOR 1
-#define PIN_LIGHT_SENSOR 2
-#define PIN_IR_TRANSMITTER 4
-#define PIN_IR_RECEIVER 5
-
-#define LIGHT_OFF_TIMEOUT_SECONDS (60 * 5)  // 5 minutes
-// #define LIGHT_OFF_TIMEOUT_SECONDS 10
-#define OCCUPANCY_TIMEOUT_SECONDS 3
 
 /* Device */
 Button btn_(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
@@ -38,7 +28,11 @@ MatterOccupancySensor matter_occupancy_sensor_;
 
 /* Preferences */
 Preferences prefs_;
-static int light_off_timeout_seconds_;
+static const char* PREFERENCES_PARTITION_LABEL = "matter";
+static const char* PREFERENCES_KEY_TIMEOUT = "timeout";
+static const char* PREFERENCES_KEY_IR_ON = "ir_on";
+static const char* PREFERENCES_KEY_IR_OFF = "ir_off";
+static int light_off_timeout_seconds_ = LIGHT_OFF_TIMEOUT_SECONDS;
 static std::vector<uint16_t> ir_data_light_on_;
 static std::vector<uint16_t> ir_data_light_off_;
 
@@ -82,12 +76,12 @@ void handle_commands() {
     const auto& ir_data = ir_remote_.get();
     if (tokens[1] == "on") {
       ir_data_light_on_ = ir_data;
-      prefs_.putBytes("ir_L1", ir_data_light_on_.data(),
+      prefs_.putBytes(PREFERENCES_KEY_IR_ON, ir_data_light_on_.data(),
                       ir_data_light_on_.size() * sizeof(uint16_t));
       LOGI("Recorded IR data for Light ON (%zu)", ir_data_light_on_.size());
     } else if (tokens[1] == "off") {
       ir_data_light_off_ = ir_data;
-      prefs_.putBytes("ir_L0", ir_data_light_off_.data(),
+      prefs_.putBytes(PREFERENCES_KEY_IR_OFF, ir_data_light_off_.data(),
                       ir_data_light_off_.size() * sizeof(uint16_t));
       LOGI("Recorded IR data for Light OFF (%zu)", ir_data_light_off_.size());
     } else {
@@ -104,7 +98,7 @@ void handle_commands() {
       return;
     }
     light_off_timeout_seconds_ = seconds;
-    prefs_.putInt("timout", light_off_timeout_seconds_);
+    prefs_.putInt(PREFERENCES_KEY_TIMEOUT, light_off_timeout_seconds_);
     LOGW("Light OFF Timeout set to %d seconds", light_off_timeout_seconds_);
   } else {
     LOGE("Unknown command: %s", command.c_str());
@@ -118,19 +112,19 @@ void setup() {
   Serial.begin(CONFIG_CONSOLE_UART_BAUDRATE);
 
   /* Preferences */
-  prefs_.begin("matter");
+  prefs_.begin(PREFERENCES_PARTITION_LABEL);
 
   /* Preferences (Light OFF Timeout) */
   light_off_timeout_seconds_ =
       prefs_.getInt("timeout", LIGHT_OFF_TIMEOUT_SECONDS);
 
   /* Preferences (IR Data) */
-  ir_data_light_on_.resize(prefs_.getBytesLength("ir_L1"));
-  prefs_.getBytes("ir_L1", ir_data_light_on_.data(),
+  ir_data_light_on_.resize(prefs_.getBytesLength(PREFERENCES_KEY_IR_ON));
+  prefs_.getBytes(PREFERENCES_KEY_IR_ON, ir_data_light_on_.data(),
                   ir_data_light_on_.size() * sizeof(uint16_t));
   LOGI("IR Data Light ON: %zu", ir_data_light_on_.size());
-  ir_data_light_off_.resize(prefs_.getBytesLength("ir_L0"));
-  prefs_.getBytes("ir_L0", ir_data_light_off_.data(),
+  ir_data_light_off_.resize(prefs_.getBytesLength(PREFERENCES_KEY_IR_OFF));
+  prefs_.getBytes(PREFERENCES_KEY_IR_OFF, ir_data_light_off_.data(),
                   ir_data_light_off_.size() * sizeof(uint16_t));
   LOGI("IR Data Light OFF: %zu", ir_data_light_off_.size());
 

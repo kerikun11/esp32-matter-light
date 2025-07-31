@@ -40,6 +40,8 @@ class IRRemote {
   static void IRAM_ATTR isrEntryPoint(void* this_ptr);
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 void IRRemote::begin(int tx, int rx) {
   pin_tx_ = tx;
   pin_rx_ = rx;
