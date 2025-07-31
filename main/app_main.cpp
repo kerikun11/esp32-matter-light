@@ -23,7 +23,8 @@ IRRemote ir_remote_;
 
 /* Matter */
 MatterOnOffLight matter_light_;
-MatterOnOffPlugin matter_switch_;
+MatterOnOffPlugin matter_motion_switch_;
+MatterOnOffPlugin matter_brightness_switch_;
 MatterOccupancySensor matter_occupancy_sensor_;
 
 /* Preferences */
@@ -43,27 +44,30 @@ static constexpr const char* TAG = "main";
 void matterEventCallback(matterEvent_t,
                          const chip::DeviceLayer::ChipDeviceEvent*);
 
-void errorHandler(const char* file, int line, const char* func,
-                  const char* message) {
+static void errorHandler(const char* file, int line, const char* func,
+                         const char* message) {
   LOGE("Error in %s:%d (%s): %s", file, line, func, message);
   led_.setBackground(RgbLed::Color::Red);
   delay(1000);
   ESP.restart();
 }
 
-void handle_commands() {
+static void handle_commands() {
   if (!command_parser_.available()) return;
   const auto& tokens = command_parser_.get();
   if (tokens.empty()) return;
   const auto& command = tokens[0];
   LOGI("command: %s", command.c_str());
-  if (command == "help") {
+  if (command == "help" || command == "h") {
     LOGI("Available Commands:");
     LOGI("- help              : Show this help");
+    LOGI("- info              : Show device information");
     LOGI("- record <on|off>   : Record IR data for Light ON/OFF");
     LOGI("- timeout <seconds> : Set light OFF timeout in seconds (current: %d)",
          light_off_timeout_seconds_);
-  } else if (command == "record") {
+  } else if (command == "info" || command == "i") {
+    LOGI("Brightness Sensor Value: %f", brightness_sensor_.getNormalized());
+  } else if (command == "record" || command == "r") {
     if (tokens.size() < 2) {
       LOGE("Usage: record <on|off>");
       return;
@@ -88,7 +92,7 @@ void handle_commands() {
     } else {
       LOGE("Invalid argument: %s", tokens[1].c_str());
     }
-  } else if (command == "timeout") {
+  } else if (command == "timeout" || command == "t") {
     if (tokens.size() < 2) {
       LOGE("Usage: timeout <seconds>");
       return;
@@ -106,13 +110,7 @@ void handle_commands() {
   }
 }
 
-void setup() {
-  led_.setBackground(RgbLed::Color::Green);
-
-  /* CommandReceiver */
-  Serial.begin(CONFIG_MONITOR_BAUD);
-
-  /* Preferences */
+static void setupPreferences() {
   prefs_.begin(PREFERENCES_PARTITION_LABEL);
 
   /* Preferences (Light OFF Timeout) */
@@ -128,13 +126,24 @@ void setup() {
   prefs_.getBytes(PREFERENCES_KEY_IR_OFF, ir_data_light_off_.data(),
                   ir_data_light_off_.size() * sizeof(uint16_t));
   LOGI("IR Data Light OFF: %zu", ir_data_light_off_.size());
+}
+
+void setup() {
+  led_.setBackground(RgbLed::Color::Green);
+
+  /* CommandReceiver */
+  Serial.begin(CONFIG_MONITOR_BAUD);
+
+  /* Preferences */
+  setupPreferences();
 
   /* IR */
   ir_remote_.begin(PIN_IR_TRANSMITTER, PIN_IR_RECEIVER);
 
-  /* Matter Endpoint */
+  /* Matter Endpoints */
   matter_light_.begin(true);
-  matter_switch_.begin(true);
+  matter_motion_switch_.begin(true);
+  matter_brightness_switch_.begin(true);
   matter_occupancy_sensor_.begin();
 
   /* Matter */
@@ -164,7 +173,6 @@ void loop() {
   /* update */
   led_.update();
   btn_.update();
-  // ir_remote_.handle();
   command_parser_.update();
   brightness_sensor_.update();
 
@@ -194,20 +202,25 @@ void loop() {
 
   /* matter light changed: sync matter switch */
   if (last_matter_light != matter_light_) {
-    matter_switch_ = matter_light_;
-    LOGW("MatterSwitch: %d (MatterLight)", matter_switch_.getOnOff());
+    matter_motion_switch_ = matter_light_;
+    LOGW("MatterMotionSwitch: %d (MatterLight)",
+         matter_motion_switch_.getOnOff());
     if (!occupancy_state) {
-      matter_switch_ = !matter_light_;
-      LOGW("MatterSwitch: %d (No Motion)", matter_switch_.getOnOff());
+      matter_motion_switch_ = !matter_light_;
+      LOGW("MatterMotionSwitch: %d (No Motion)",
+           matter_motion_switch_.getOnOff());
     }
   }
 
-  /* matter switch enabled: sync matter light to occupancy sensor */
-  if (matter_switch_) {
-    if (!matter_light_ && occupancy_state) {
+  /* MatterMotionSwitch: sync matter light to occupancy sensor */
+  if (matter_motion_switch_) {
+    /* Light ON */
+    if (!matter_light_ && occupancy_state &&
+        (!matter_brightness_switch_ || !brightness_sensor_.isBright())) {
       matter_light_ = true;
       LOGW("MatterLight: %d (Occupancy Sensor)", matter_light_.getOnOff());
     }
+    /* Light OFF */
     if (matter_light_ &&
         seconds_since_last_motion > light_off_timeout_seconds_) {
       matter_light_ = false;
@@ -216,45 +229,41 @@ void loop() {
   }
   last_matter_light = matter_light_;
 
-  /* auto matter switch ON */
+  /* MatterMotionSwitch: auto recovery */
   if (last_matter_light_change_ms > 11 * 60 * 60 * 1000) {
-    if (!matter_switch_) {
-      matter_switch_ = true;
-      LOGW("MatterSwitch: %d (Auto ON after 10 hours)",
-           matter_switch_.getOnOff());
+    if (!matter_motion_switch_) {
+      matter_motion_switch_ = true;
+      LOGW("MatterMotionSwitch: %d (Auto ON after 10 hours)",
+           matter_motion_switch_.getOnOff());
     }
   }
 
   /* brightness sensor */
-  // if (brightness_sensor_.getMillisSinceChange() > 5000 &&
-  //     brightness_sensor_.isBright() && !matter_light_ && !atter_switch_) {
-  //   matter_switch_ = true;
-  //   LOGW("Enabled: %d (Brightness Sensor ON)",
-  //            matter_switch_.getOnOff());
+  // static long ms = millis();
+  // if (millis() - ms >= 1000) {
+  //   ms = millis();
+  //   ESP_LOGI(TAG, "Brightness Sensor Value: %f",
+  //            brightness_sensor_.getNormalized());
   // }
   /* brightness sensor */
-  static long ms = millis();
-  if (millis() - ms >= 1000) {
-    ms = millis();
-    ESP_LOGI(TAG, "Brightness Sensor Value: %f",
-             brightness_sensor_.getNormalized());
-  }
+  // if (matter_light_ && millis() - last_matter_light_change_ms > 5000 &&
+  //     !brightness_sensor_.isBright() &&
+  //     brightness_sensor_.getMillisSinceChange() > 5000) {
+  //   matter_light_ = false;
+  //   LOGW("MatterLight: %d (Brightness Sensor)", matter_light_.getOnOff());
+  // }
 
   /* matter occupancy sensor */
   if (matter_occupancy_sensor_ != occupancy_state) {
     matter_occupancy_sensor_ = occupancy_state;
     if (occupancy_state) {
       LOGW("[PIR] Motion Detected");
-      if (matter_switch_) led_.blinkOnce(RgbLed::Color::Yellow);
+      if (matter_motion_switch_) led_.blinkOnce(RgbLed::Color::Blue);
     } else {
       LOGW("[PIR] No Motion Timeout");
-      if (matter_switch_) led_.blinkOnce(RgbLed::Color::Cyan);
+      if (matter_motion_switch_) led_.blinkOnce(RgbLed::Color::Blue);
     }
   }
-
-  /* Status LED */
-  led_.setBackground(matter_switch_ ? RgbLed::Color::White
-                                    : RgbLed::Color::Off);
 
   /* IR transmitter */
   if (light_state_last != matter_light_) {
@@ -269,6 +278,20 @@ void loop() {
       led_.blinkOnce(RgbLed::Color::Green);
       ir_remote_.send(ir_data_light_off_);
     }
+  }
+
+  /* Status LED */
+  if (matter_motion_switch_) {
+    if (!matter_light_ && matter_brightness_switch_ &&
+        brightness_sensor_.isBright()) {
+      led_.setBackground(RgbLed::Color::Yellow);
+    } else if (occupancy_state) {
+      led_.setBackground(RgbLed::Color::Blue);
+    } else {
+      led_.setBackground(RgbLed::Color::White);
+    }
+  } else {
+    led_.setBackground(RgbLed::Color::Off);
   }
 
   /* IR Receiver */
@@ -432,7 +455,7 @@ void matterEventCallback(matterEvent_t event,
       break;
     case MATTER_SERVER_READY:
       LOGW("MATTER_SERVER_READY");
-      led_.setBackground(RgbLed::Color::Blue);
+      led_.setBackground(RgbLed::Color::White);
       break;
     default:
       break;
