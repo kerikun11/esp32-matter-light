@@ -7,7 +7,8 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
   - ESP32-C6
 - 開発環境
   - [ESP-IDF](https://github.com/espressif/esp-idf) v5.4.2
-  - [ESP32-Arduino](https://github.com/espressif/arduino-esp32) v3.0.5
+  - [ESP-Matter](https://github.com/espressif/esp-matter) v1.4
+  - [ESP32-Arduino](https://github.com/espressif/arduino-esp32) v3.2.1
 
 ## 機能
 
