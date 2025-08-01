@@ -1,6 +1,6 @@
 # ESP32 Matter Smart Light Controller
 
-スマートホームMatter対応、人感センサ照明リモコン（赤外線学習リモコン）。
+Matterスマートホーム対応、人感センサ付き照明コントローラ（赤外線学習リモコン）。
 
 - 対応マイコン一覧
   - ESP32-S3
@@ -11,9 +11,9 @@
 
 ## 機能
 
-- 赤外線学習リモコン(OSRB38C9AA/OSI5FU3A11C)
+- 赤外線学習リモコン
   - 任意の照明のリモコンのON/OFFの赤外線データを録画・再生
-- 人感センサ(EKMC1601111)
+- 人感センサ
   - 照明の自動ON/OFFのため、人を検出
 - 照度センサ(NJL7502L)
   - 日中の明るい環境では自動照明ONを無効化するために照度センサを搭載
@@ -81,8 +81,14 @@
 (準備中)
 
 - ピンアサインはソースコード [main/app_config.h](main/app_config.h) を参照。
-- 照度センサ(NJL7502L)は100kΩ程度でGNDにつなぐ(感度調整のため可変抵抗でもよい)。
-- 赤外線LED(OSI5FU3A11C)は2つ直列、FET(2N7000など)で制御する。
+- 赤外線受光モジュール: OSRB38C9AA
+  - 38kHzの一般的なもの。GPIOに接続するだけ。
+- 赤外線LED: OSI5FU3A11C
+  - 2つ直列、FET(2N7000など)で制御する。
+- 人感センサ: EKMC1601111
+  - GPIOに接続するだけ。
+- 照度センサ: NJL7502L
+  - 100kΩ程度でGNDにつなぐ(感度調整のため可変抵抗でもよい)。
 - 参考: [IR-Station/how-to-make.md | GitHub](https://github.com/kerikun11/IR-Station/blob/master/how-to-make.md)
 
 ### ビルド&書き込み方法
