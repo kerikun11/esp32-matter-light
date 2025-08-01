@@ -1,4 +1,4 @@
-# Matter Smart Light Controller
+# ESP32 Matter Smart Light Controller
 
 スマートホームMatter対応、人感センサ照明リモコン（赤外線学習リモコン）。
 
