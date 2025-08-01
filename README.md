@@ -6,8 +6,8 @@
   - ESP32-S3
   - ESP32-C6
 - 開発環境
-  - ESP-IDF v5.4.2
-  - ESP32-Arduino v3.0.5
+  - [ESP-IDF](https://github.com/espressif/esp-idf) v5.4.2
+  - [ESP32-Arduino](https://github.com/espressif/arduino-esp32) v3.0.5
 
 ## 機能
 
@@ -86,7 +86,10 @@
 
 ### ビルド&書き込み方法
 
-ESP32のUSBポート(非UARTポート)とPCを接続して下記コマンドを実行する。
+- [ESP-IDFのドキュメント](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/versions.html)に従って開発環境を構築する (Linux推奨)。
+  - 環境構築のしやすさ、ビルド時間などからLinux推奨
+  - 現時点ではPlatformIOには非対応(ESP32-Arduino Matterライブラリが非対応なため)
+- ESP32のUSBポート(非UARTポート)とPCを接続して下記コマンドを実行する。
 
 ```sh
 # ESP-IDF v5.4.2 Environment
