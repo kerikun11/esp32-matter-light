@@ -112,4 +112,4 @@ idf flash monitor
 
 ## ライセンス
 
-- GPL v2.1 (Arduinoライブラリと同じライセンス)
+- LGPL v2.1 (Arduinoライブラリと同じライセンス)
