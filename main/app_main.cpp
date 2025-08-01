@@ -248,7 +248,8 @@ void loop() {
   last_matter_light = matter_light_;
 
   /* MatterMotionSwitch: auto recovery */
-  if (last_matter_light_change_ms > 11 * 60 * 60 * 1000) {
+  if (last_matter_light_change_ms >
+      AUTO_RECOVERY_TIMEOUT_HOURS * 60 * 60 * 1000) {
     if (!matter_motion_switch_) {
       matter_motion_switch_ = true;
       LOGW("MatterMotionSwitch: %d (Auto ON after 10 hours)",

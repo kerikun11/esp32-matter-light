@@ -87,7 +87,7 @@ void IRRemote::send(const std::vector<uint16_t>& data) {
     state_ = state_cache;
   }
   interrupts();
-  LOGI("[IR] Send OK");
+  LOGI("[IR] Send OK (size: %zu)", data.size());
 }
 
 void IRRemote::isr() {
