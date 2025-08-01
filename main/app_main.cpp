@@ -2,6 +2,7 @@
  * @copyright 2025 Ryotaro Onuki
  * SPDX-License-Identifier: LGPL-2.1
  */
+#include <Arduino.h>
 #include <Matter.h>
 #include <Preferences.h>
 
@@ -15,7 +16,7 @@
 #include "rgb_led.h"
 
 /* Device */
-Button btn_(PIN_BUTTON, /* long hold timeout [ms] */ 5000);
+Button btn_(PIN_BUTTON);
 RgbLed led_(PIN_RGB_LED);
 MotionSensor motion_sensor_(PIN_MOTION_SENSOR);
 BrightnessSensor brightness_sensor_(PIN_LIGHT_SENSOR);
@@ -24,6 +25,9 @@ IRRemote ir_remote_;
 /* Matter */
 MatterOnOffLight matter_light_;
 MatterOnOffPlugin matter_motion_switch_;
+
+/* Console */
+CommandParser command_parser_(Serial);
 
 /* Preferences */
 Preferences prefs_;
@@ -37,20 +41,9 @@ static bool ambient_light_mode_enabled_;
 static std::vector<uint16_t> ir_data_light_on_;
 static std::vector<uint16_t> ir_data_light_off_;
 
-/* Serial */
-CommandParser command_parser_(Serial);
-
 static constexpr const char* TAG = "main";
 void matterEventCallback(matterEvent_t,
                          const chip::DeviceLayer::ChipDeviceEvent*);
-
-static void errorHandler(const char* file, int line, const char* func,
-                         const char* message) {
-  LOGE("Error in %s:%d (%s): %s", file, line, func, message);
-  led_.setBackground(RgbLed::Color::Red);
-  delay(1000);
-  ESP.restart();
-}
 
 static void handle_commands() {
   if (!command_parser_.available()) return;
@@ -248,13 +241,11 @@ void loop() {
   last_matter_light = matter_light_;
 
   /* MatterMotionSwitch: auto recovery */
-  if (last_matter_light_change_ms >
-      AUTO_RECOVERY_TIMEOUT_HOURS * 60 * 60 * 1000) {
-    if (!matter_motion_switch_) {
-      matter_motion_switch_ = true;
-      LOGW("MatterMotionSwitch: %d (Auto ON after 10 hours)",
-           matter_motion_switch_.getOnOff());
-    }
+  if (!matter_motion_switch_ &&
+      last_matter_light_change_ms > MOTION_SWITCH_AUTO_ON_SECONDS * 1000) {
+    matter_motion_switch_ = true;
+    LOGW("MatterMotionSwitch: %d (Auto ON after 10 hours)",
+         matter_motion_switch_.getOnOff());
   }
 
   /* matter occupancy sensor */

@@ -7,7 +7,7 @@
 
 class Button {
  public:
-  Button(uint8_t pin, uint32_t longPressMs = 1000, uint32_t debounceMs = 20)
+  Button(uint8_t pin, uint32_t longPressMs = 5000, uint32_t debounceMs = 20)
       : pin_(pin), long_press_ms_(longPressMs), debounce_ms_(debounceMs) {
     pinMode(pin_, INPUT_PULLUP);
   }
