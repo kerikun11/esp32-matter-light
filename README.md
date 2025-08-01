@@ -4,7 +4,11 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 
 - 対応マイコン一覧
   - ESP32-S3
+    - ESP32-S3-DevKitC-1
+    - Seeed Studio XIAO ESP32S3
   - ESP32-C6
+    - ESP32-C6-DevKitC-1
+    - Seeed Studio XIAO ESP32C6
 - 開発環境
   - [ESP-IDF](https://github.com/espressif/esp-idf) v5.4.2
   - [ESP-Matter](https://github.com/espressif/esp-matter) v1.4
@@ -43,7 +47,7 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
    - 照度センサを使用する場合はシリアルコンソールでコマンド `ambient on` を送信する。
    - 照度センサを使用しない場合はシリアルコンソールでコマンド `ambient off` を送信する。
 4. 自動照明OFFのタイムアウト設定 (デフォルトは300秒(=5分))  
-   人が検出されなかったときに自動で証明をOFFにするタイムアウトを設定。
+   人が検出されなかったときに自動で照明をOFFにするタイムアウトを設定。
    - シリアルコンソールでコマンド `timeout <秒数>` を送信する。
    - 現在の値はコマンド `help` で確認できる。
    - あまり短くしすぎると、動いていないだけで照明が消えてしまう。
@@ -86,11 +90,14 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
   - 38kHzの一般的なもの。GPIOに接続するだけ。
 - 赤外線LED: OSI5FU3A11C
   - 2つ直列、FET(2N7000など)で制御する。
+  - 参考: [IR-Station/how-to-make.md | GitHub](https://github.com/kerikun11/IR-Station/blob/master/how-to-make.md)
 - 人感センサ: EKMC1601111
   - GPIOに接続するだけ。
 - 照度センサ: NJL7502L
   - 100kΩ程度でGNDにつなぐ(感度調整のため可変抵抗でもよい)。
-- 参考: [IR-Station/how-to-make.md | GitHub](https://github.com/kerikun11/IR-Station/blob/master/how-to-make.md)
+  - 照度センサを使用しない場合はつながなくてよい。
+- マイコン内蔵RGB LED: SK6812
+  - DevKit上に実装されているものを使用。
 
 ### ビルド&書き込み方法
 
