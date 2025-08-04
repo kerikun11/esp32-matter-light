@@ -241,8 +241,10 @@ void loop() {
   last_matter_light = matter_light_;
 
   /* MatterMotionSwitch: auto recovery */
+  const int32_t seconds_after_light_change =
+      (millis() - last_matter_light_change_ms) / 1000;
   if (!matter_motion_switch_ &&
-      last_matter_light_change_ms > MOTION_SWITCH_AUTO_ON_SECONDS * 1000) {
+      seconds_after_light_change > MOTION_SWITCH_AUTO_ON_SECONDS) {
     matter_motion_switch_ = true;
     LOGW("MatterMotionSwitch: %d (Auto ON after 10 hours)",
          matter_motion_switch_.getOnOff());
