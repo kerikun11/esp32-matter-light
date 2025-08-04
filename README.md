@@ -105,7 +105,7 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 - 赤外線LED: OSI5FU3A11C
   - 2つ直列、FET(2N7000など)で制御する。
   - 参考: [IR-Station/how-to-make.md | GitHub](https://github.com/kerikun11/IR-Station/blob/master/how-to-make.md)
-- 人感センサ: EKMC1601111
+- 人感センサ: EKMC1607111/EKMC1601111
   - GPIOに接続するだけ。
 - 照度センサ: NJL7502L
   - 100kΩ程度でGNDにつなぐ(感度調整のため可変抵抗でもよい)。
