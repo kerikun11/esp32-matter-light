@@ -1,6 +1,6 @@
 /**
- * @copyright 2025 Ryotaro Onuki
  * SPDX-License-Identifier: LGPL-2.1
+ * @copyright 2025 Ryotaro Onuki
  */
 #pragma once
 #include <Arduino.h>
