@@ -10,7 +10,7 @@
             "cStandard": "gnu23",
             "intelliSenseMode": "gcc-arm",
             "compileCommands": [
-                "build/compile_commands.json"
+                "firmware/build/compile_commands.json"
             ]
         }
     ],

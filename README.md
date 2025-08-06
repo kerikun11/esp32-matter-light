@@ -99,7 +99,7 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 
 (準備中)
 
-- ピンアサインはソースコード [main/app_config.h](main/app_config.h) を参照。
+- ピンアサインはソースコード [app_config.h](firmware/main/app_config.h) を参照。
 - 赤外線受光モジュール: OSRB38C9AA
   - 38kHzの一般的なもの。GPIOに接続するだけ。
 - 赤外線LED: OSI5FU3A11C
