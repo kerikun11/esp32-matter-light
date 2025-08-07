@@ -38,8 +38,8 @@ static const char* PREFERENCES_KEY_IR_ON = "ir_on";
 static const char* PREFERENCES_KEY_IR_OFF = "ir_off";
 static int light_off_timeout_seconds_;
 static bool ambient_light_mode_enabled_;
-static std::vector<uint16_t> ir_data_light_on_;
-static std::vector<uint16_t> ir_data_light_off_;
+static IRRemote::IRData ir_data_light_on_;
+static IRRemote::IRData ir_data_light_off_;
 
 static constexpr const char* TAG = "main";
 void matterEventCallback(matterEvent_t,
@@ -68,21 +68,21 @@ static void handle_commands() {
       return;
     }
     ir_remote_.clear();
-    while (!ir_remote_.available()) {
-      led_.blinkOnce(RgbLed::Color::Green);
-      ir_remote_.handle();
-      delay(100);
+    LOGI("[IR] Receiver Listening ...");
+    if (!ir_remote_.waitForAvailable(10'000)) {
+      LOGW("[IR] Receiver timeout, please try again.");
+      return;
     }
-    const auto& ir_data = ir_remote_.get();
+    const auto ir_data = ir_remote_.get();
     if (tokens[1] == "on") {
       ir_data_light_on_ = ir_data;
-      prefs_.putBytes(PREFERENCES_KEY_IR_ON, ir_data_light_on_.data(),
-                      ir_data_light_on_.size() * sizeof(uint16_t));
+      IRRemote::saveToPreferences(prefs_, PREFERENCES_KEY_IR_ON,
+                                  ir_data_light_on_);
       LOGI("Recorded IR data for Light ON (%zu)", ir_data_light_on_.size());
     } else if (tokens[1] == "off") {
       ir_data_light_off_ = ir_data;
-      prefs_.putBytes(PREFERENCES_KEY_IR_OFF, ir_data_light_off_.data(),
-                      ir_data_light_off_.size() * sizeof(uint16_t));
+      IRRemote::saveToPreferences(prefs_, PREFERENCES_KEY_IR_OFF,
+                                  ir_data_light_off_);
       LOGI("Recorded IR data for Light OFF (%zu)", ir_data_light_off_.size());
     } else {
       LOGE("Invalid argument: %s", tokens[1].c_str());
@@ -130,13 +130,11 @@ static void loadPreferences() {
   ambient_light_mode_enabled_ = prefs_.getBool(PREFERENCES_KEY_AMBIENT, true);
 
   /* Preferences (IR Data) */
-  ir_data_light_on_.resize(prefs_.getBytesLength(PREFERENCES_KEY_IR_ON));
-  prefs_.getBytes(PREFERENCES_KEY_IR_ON, ir_data_light_on_.data(),
-                  ir_data_light_on_.size() * sizeof(uint16_t));
+  IRRemote::loadFromPreferences(prefs_, PREFERENCES_KEY_IR_ON,
+                                ir_data_light_on_);
+  IRRemote::loadFromPreferences(prefs_, PREFERENCES_KEY_IR_OFF,
+                                ir_data_light_off_);
   LOGI("IR Data Light ON: %zu", ir_data_light_on_.size());
-  ir_data_light_off_.resize(prefs_.getBytesLength(PREFERENCES_KEY_IR_OFF));
-  prefs_.getBytes(PREFERENCES_KEY_IR_OFF, ir_data_light_off_.data(),
-                  ir_data_light_off_.size() * sizeof(uint16_t));
   LOGI("IR Data Light OFF: %zu", ir_data_light_off_.size());
 }
 
@@ -178,7 +176,6 @@ void setup() {
 void loop() {
   static bool last_matter_light = matter_light_;
   static bool light_state_last = !matter_light_;  //< update first time
-  static uint64_t last_matter_light_change_ms = 0;
   static bool last_occupancy_state = false;
 
   /* update */
@@ -186,6 +183,7 @@ void loop() {
   btn_.update();
   command_parser_.update();
   brightness_sensor_.update();
+  ir_remote_.handle();
 
   /* button state */
   if (btn_.pressed()) LOGI("[Button] pressed");
@@ -211,7 +209,7 @@ void loop() {
   int seconds_since_last_motion = motion_sensor_.getSecondsSinceLastMotion();
   bool occupancy_state = seconds_since_last_motion < OCCUPANCY_TIMEOUT_SECONDS;
 
-  /* matter light changed: sync matter switch */
+  /* MatterLight: sync matter switch */
   if (last_matter_light != matter_light_) {
     matter_motion_switch_ = matter_light_;
     LOGW("MatterMotionSwitch: %d (MatterLight)",
@@ -238,7 +236,6 @@ void loop() {
       LOGW("MatterLight: %d (Occupancy Sensor)", matter_light_.getOnOff());
     }
   }
-  last_matter_light = matter_light_;
 
   /* matter occupancy sensor */
   if (last_occupancy_state != occupancy_state) {
@@ -252,10 +249,37 @@ void loop() {
     }
   }
 
+  /* IR Receiver */
+  if (ir_remote_.available()) {
+    const auto ir_data = ir_remote_.get();
+    ir_remote_.clear();
+    if (IRRemote::isIrDataEqual(ir_data, ir_data_light_on_)) {
+      LOGI("[IR] Light ON Signal Received");
+      if (matter_light_) {
+        matter_motion_switch_.toggle();
+      } else {
+        matter_light_ = true;
+        matter_motion_switch_ = true;
+      }
+      led_.blinkOnce(RgbLed::Color::Cyan);
+    } else if (IRRemote::isIrDataEqual(ir_data, ir_data_light_off_)) {
+      LOGI("[IR] Light OFF Signal Received");
+      if (!matter_light_) {
+        matter_motion_switch_.toggle();
+      } else {
+        matter_light_ = false;
+        matter_motion_switch_ = false;
+      }
+      led_.blinkOnce(RgbLed::Color::Cyan);
+    } else {
+      LOGW("[IR] Unknown Signal Received");
+    }
+    LOGW("MatterMotionSwitch: %d (IR)", matter_motion_switch_.getOnOff());
+  }
+
   /* IR transmitter */
   if (light_state_last != matter_light_) {
     light_state_last = matter_light_;
-    last_matter_light_change_ms = millis();
     if (light_state_last) {
       LOGW("[IR] Light ON");
       led_.blinkOnce(RgbLed::Color::Green);
@@ -283,6 +307,9 @@ void loop() {
 
   /* Command Parser */
   handle_commands();
+
+  /* Update Vars */
+  last_matter_light = matter_light_;
 
   /* WDT Yield */
   delay(1);

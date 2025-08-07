@@ -15,7 +15,7 @@ class RgbLed {
 
   void off() { setBackground(Color::Off); }
 
-  void blinkOnce(Color color, uint16_t durationMs = 500) {
+  void blinkOnce(Color color, uint16_t durationMs = 200) {
     blinkStart_ = millis();
     blinkDuration_ = durationMs;
     blinking_ = true;

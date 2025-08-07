@@ -5,21 +5,33 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Preferences.h>
 
 class IRRemote {
  public:
-  static constexpr const int IR_RECEIVE_TIMEOUT_US = 200'000;
+  static constexpr const int IR_RECEIVE_TIMEOUT_US = 100'000;
   static constexpr const int RAW_DATA_BUFFER_SIZE = 800;
   static constexpr const int RAW_DATA_MIN_SIZE = 8;
+  using IRDataElement = uint16_t;
+  using IRData = std::vector<IRDataElement>;
 
   void begin(int tx, int rx);
 
   void handle();
-  bool available();
-  std::vector<uint16_t> get();
   void clear();
+  bool available();
+  bool waitForAvailable(int timeout_ms = -1);
+  IRData get();
 
-  void send(const std::vector<uint16_t>& data);
+  void send(const IRData& data);
+
+  static bool isIrDataEqual(const IRData& a, const IRData& b,
+                            float tolerance_percent = 20.0f);
+
+  static bool saveToPreferences(Preferences& prefs, const char* key,
+                                const IRData& data);
+  static bool loadFromPreferences(Preferences& prefs, const char* key,
+                                  IRData& data);
 
  private:
   enum class IR_RECEIVER_STATE {
@@ -60,8 +72,20 @@ bool IRRemote::available() {
   return state_ == IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
 }
 
-std::vector<uint16_t> IRRemote::get() {
-  return std::vector<uint16_t>{raw_data_, raw_data_ + raw_index_};
+bool IRRemote::waitForAvailable(int timeout_ms) {
+  unsigned long start = millis();
+  while (!available()) {
+    if (timeout_ms > 0 && millis() - start > timeout_ms) {
+      return false;
+    }
+    handle();
+    delay(1);
+  }
+  return true;
+}
+
+IRRemote::IRData IRRemote::get() {
+  return IRData{raw_data_, raw_data_ + raw_index_};
 }
 
 void IRRemote::clear() {
@@ -69,7 +93,7 @@ void IRRemote::clear() {
   LOGI("[IR] clear");
 }
 
-void IRRemote::send(const std::vector<uint16_t>& data) {
+void IRRemote::send(const IRData& data) {
   noInterrupts();
   {
     enum IR_RECEIVER_STATE state_cache = state_;
@@ -145,13 +169,12 @@ void IRRemote::handle() {
         LOGI("[IR] Raw Data Size: %d (skipped)", raw_index_);
         state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
         break;
-      }
-      if (raw_index_ >= RAW_DATA_BUFFER_SIZE) {
+      } else if (raw_index_ >= RAW_DATA_BUFFER_SIZE) {
         LOGE("[IR] Raw Data Size: %d (overflow)", raw_index_);
         state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
         break;
       }
-      LOGI("[IR] Raw Data:");
+      LOGI("[IR] Raw Data Size: %d", raw_index_);
       for (int i = 0; i < raw_index_; i++) {
         printf("%d", raw_data_[i]);
         if (i != raw_index_ - 1) printf(",");
@@ -160,4 +183,33 @@ void IRRemote::handle() {
       state_ = IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
       break;
   }
+}
+
+bool IRRemote::isIrDataEqual(const IRData& a, const IRData& b,
+                             float tolerance_percent) {
+  if (a.size() != b.size()) return false;
+  for (size_t i = 0; i < a.size(); ++i) {
+    float expected = static_cast<float>(b[i]);
+    float diff = std::abs(static_cast<float>(a[i]) - expected);
+    float allowed = expected * (tolerance_percent / 100.0f);
+    if (diff > allowed) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool IRRemote::saveToPreferences(Preferences& prefs, const char* key,
+                                 const IRData& data) {
+  size_t size = data.size() * sizeof(IRDataElement);
+  return size == prefs.putBytes(key, data.data(), size);
+}
+
+bool IRRemote::loadFromPreferences(Preferences& prefs, const char* key,
+                                   IRData& data) {
+  size_t size = prefs.getBytesLength(key);
+  if (size == 0) return false;
+  data.resize(size / sizeof(IRDataElement));
+  prefs.getBytes(key, data.data(), size);
+  return true;
 }
