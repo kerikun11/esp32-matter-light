@@ -77,8 +77,6 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 - 物理ボタン
   - ボタンを押すたびに照明のON/OFFをトグルする。
   - ボタンを10秒長押しするとMatterを初期化 (Commissioning Modeに) する。
-- 長時間放置した時の自動人感センサON
-  - 一定時間（10時間）放置すると自動的に人感センサがONになる。(ONし忘れ対策)
 
 ![状態遷移図](images/diagram.drawio.svg)
 
@@ -127,7 +125,7 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 
 - [ESP-IDFのドキュメント](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/versions.html)に従って開発環境を構築する (Linux推奨)。
   - 環境構築のしやすさ、ビルド時間などからLinux推奨
-  - 現時点ではPlatformIOには非対応(ESP32-Arduino Matterライブラリが非対応なため)
+  - 現時点ではPlatformIOには非対応(ESP32-Arduino Matterライブラリが[非対応](https://github.com/platformio/platform-espressif32/issues/854)なため)
 - ESP32のUSBポート(非UARTポート)とPCを接続して下記コマンドを実行する。
 
 ```sh

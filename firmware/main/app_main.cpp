@@ -240,16 +240,6 @@ void loop() {
   }
   last_matter_light = matter_light_;
 
-  /* MatterMotionSwitch: auto recovery */
-  const int32_t seconds_after_light_change =
-      (millis() - last_matter_light_change_ms) / 1000;
-  if (!matter_motion_switch_ &&
-      seconds_after_light_change > MOTION_SWITCH_AUTO_ON_SECONDS) {
-    matter_motion_switch_ = true;
-    LOGW("MatterMotionSwitch: %d (Auto ON after 10 hours)",
-         matter_motion_switch_.getOnOff());
-  }
-
   /* matter occupancy sensor */
   if (last_occupancy_state != occupancy_state) {
     last_occupancy_state = occupancy_state;

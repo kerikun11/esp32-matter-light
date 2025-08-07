@@ -43,4 +43,3 @@
 /* Timeout */
 #define OCCUPANCY_TIMEOUT_SECONDS 3                   // 3 seconds
 #define LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT (5 * 60)    // 5 minutes
-#define MOTION_SWITCH_AUTO_ON_SECONDS (10 * 60 * 60)  // 10 hours
