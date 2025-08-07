@@ -18,10 +18,10 @@
 #if 0
 // ESP32-C6 DevKitC-1
 // https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c6/esp32-c6-devkitc-1/user_guide.html
-#define PIN_LIGHT_SENSOR 0  //< ADC (0-6)
-#define PIN_IR_TRANSMITTER 21
-#define PIN_IR_RECEIVER 20
-#define PIN_MOTION_SENSOR 19
+#define PIN_LIGHT_SENSOR 5  //< ADC (0-6)
+#define PIN_IR_TRANSMITTER 6
+#define PIN_IR_RECEIVER 7
+#define PIN_MOTION_SENSOR 4
 #define PIN_BUTTON BOOT_PIN  //< 9
 // #define PIN_RGB_LED 8  //< defined in pins_arduino.h
 
@@ -33,6 +33,7 @@
 #define PIN_IR_RECEIVER 20
 #define PIN_MOTION_SENSOR 19
 #define PIN_BUTTON 18
+#undef PIN_RGB_LED
 #define PIN_RGB_LED 17
 #endif
 
@@ -41,5 +42,5 @@
 #endif
 
 /* Timeout */
-#define OCCUPANCY_TIMEOUT_SECONDS 3                   // 3 seconds
-#define LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT (5 * 60)    // 5 minutes
+#define OCCUPANCY_TIMEOUT_SECONDS 3                 // 3 seconds
+#define LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT (5 * 60)  // 5 minutes
