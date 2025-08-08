@@ -2,13 +2,13 @@
 
 Matterスマートホーム対応、人感センサ付き照明コントローラ（赤外線学習リモコン）。
 
+![実機](images/esp32-matter-light-perspective-2.jpg)
+
 - 対応マイコン一覧
-  - ESP32-S3
-    - ESP32-S3-DevKitC-1
-    - Seeed Studio XIAO ESP32S3
   - ESP32-C6
-    - ESP32-C6-DevKitC-1
     - Seeed Studio XIAO ESP32C6
+  - ESP32-S3
+    - Seeed Studio XIAO ESP32S3
 - 開発環境
   - [ESP-IDF](https://github.com/espressif/esp-idf) v5.4.2
   - [ESP-Matter](https://github.com/espressif/esp-matter) v1.4
@@ -17,7 +17,7 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 ## 機能
 
 - 赤外線学習リモコン
-  - 任意の照明のリモコンのON/OFFの赤外線データを録画・再生
+  - 任意の照明リモコンON/OFFボタンの赤外線データを録画・再生
   - 赤外線データは内蔵フラッシュメモリ (ESP32 Preferences) に保存
 - 人感センサ
   - 焦電型人感センサで人を検出して、照明の自動ON/OFFを行う
@@ -136,8 +136,8 @@ source $IDF_PATH/export.sh
 cd firmware
 
 # select target
-idf set-target esp32s3 # ESP32-S3 の場合
 idf set-target esp32c6 # ESP32-C6 の場合
+idf set-target esp32s3 # ESP32-S3 の場合
 
 # build
 idf build
