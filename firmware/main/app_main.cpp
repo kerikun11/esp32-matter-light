@@ -289,6 +289,7 @@ void loop() {
       led_.blinkOnce(RgbLed::Color::Green);
       ir_remote_.send(ir_data_light_off_);
     }
+    delay(200);
   }
 
   /* Status LED */
