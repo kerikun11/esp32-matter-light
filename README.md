@@ -29,7 +29,7 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
   - スマートホームの規格Matterに対応。
   - WiFi経由でGoogleHomeアプリやAmazon Alexaアプリから操作可能。
 - ボタン
-  - 物理ボタンを押して直接照明をON/OFF。
+  - 基板上のボタンを押して直接照明をON/OFF。
 
 ---
 
@@ -105,7 +105,7 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 
 ### 回路
 
-(準備中)
+![回路図](pcb/esp32-matter-light.svg)
 
 - ピンアサインはソースコード [app_config.h](firmware/main/app_config.h) を参照。
 - 赤外線受光モジュール: OSRB38C9AA
