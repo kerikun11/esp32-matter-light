@@ -3,8 +3,11 @@
  * @copyright 2025 Ryotaro Onuki
  */
 #include <Arduino.h>
+#include <ArduinoOTA.h>
+#include <ESPmDNS.h>
 #include <Matter.h>
 #include <Preferences.h>
+#include <WiFi.h>
 
 #include "app_config.h"
 #include "app_log.h"
@@ -16,10 +19,10 @@
 #include "rgb_led.h"
 
 /* Device */
-Button btn_(PIN_BUTTON);
-RgbLed led_(PIN_RGB_LED);
-MotionSensor motion_sensor_(PIN_MOTION_SENSOR);
-BrightnessSensor brightness_sensor_(PIN_LIGHT_SENSOR);
+Button btn_(CONFIG_APP_PIN_BUTTON);
+RgbLed led_(CONFIG_APP_PIN_RGB_LED);
+MotionSensor motion_sensor_(CONFIG_APP_PIN_MOTION_SENSOR);
+BrightnessSensor brightness_sensor_(CONFIG_APP_PIN_LIGHT_SENSOR);
 IRRemote ir_remote_;
 
 /* Matter */
@@ -32,10 +35,12 @@ CommandParser command_parser_(Serial);
 /* Preferences */
 Preferences prefs_;
 static const char* PREFERENCES_PARTITION_LABEL = "matter";
+static const char* PREFERENCES_KEY_HOSTNAME = "hostname";
 static const char* PREFERENCES_KEY_TIMEOUT = "timeout";
 static const char* PREFERENCES_KEY_AMBIENT = "ambient";
 static const char* PREFERENCES_KEY_IR_ON = "ir_on";
 static const char* PREFERENCES_KEY_IR_OFF = "ir_off";
+static std::string hostname_;
 static int light_off_timeout_seconds_;
 static bool ambient_light_mode_enabled_;
 static IRRemote::IRData ir_data_light_on_;
@@ -54,14 +59,27 @@ static void handle_commands() {
   if (command == "help" || command == "h") {
     LOGI("Available Commands:");
     LOGI("- help              : Show this help");
+    LOGI("- reboot            : Reboot the device");
     LOGI("- info              : Show device information");
+    LOGI("- hostname <name>   : Set device hostname (current: %s)",
+         hostname_.c_str());
     LOGI("- record <on|off>   : Record IR data for Light ON/OFF");
     LOGI("- timeout <seconds> : Set light OFF timeout in seconds (current: %d)",
          light_off_timeout_seconds_);
     LOGI("- ambient <on|off>  : Ambient Light Mode (current: %s)",
          ambient_light_mode_enabled_ ? "on" : "off");
+  } else if (command == "restart" || command == "b") {
+    LOGI("Restarting the device ...");
+    ESP.restart();
   } else if (command == "info" || command == "i") {
     LOGI("Brightness Sensor Value: %f", brightness_sensor_.getNormalized());
+  } else if (command == "hostname" || command == "n") {
+    if (tokens.size() < 2) {
+      LOGE("Usage: hostname <name>");
+      return;
+    }
+    hostname_ = tokens[1];
+    prefs_.putString(PREFERENCES_KEY_HOSTNAME, hostname_.c_str());
   } else if (command == "record" || command == "r") {
     if (tokens.size() < 2) {
       LOGE("Usage: record <on|off>");
@@ -124,9 +142,14 @@ static void handle_commands() {
 static void loadPreferences() {
   prefs_.begin(PREFERENCES_PARTITION_LABEL);
 
+  /* hostname */
+  hostname_ =
+      prefs_.getString(PREFERENCES_KEY_HOSTNAME, CONFIG_APP_HOSTNAME_DEFAULT)
+          .c_str();
+
   /* Preferences (Light OFF Timeout) */
-  light_off_timeout_seconds_ =
-      prefs_.getInt(PREFERENCES_KEY_TIMEOUT, LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT);
+  light_off_timeout_seconds_ = prefs_.getInt(
+      PREFERENCES_KEY_TIMEOUT, CONFIG_APP_LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT);
   ambient_light_mode_enabled_ = prefs_.getBool(PREFERENCES_KEY_AMBIENT, true);
 
   /* Preferences (IR Data) */
@@ -138,6 +161,32 @@ static void loadPreferences() {
   LOGI("IR Data Light OFF: %zu", ir_data_light_off_.size());
 }
 
+static void setupMDNS() {
+  if (!MDNS.begin(hostname_.c_str())) {
+    LOGE("[mDNS] begin() failed");
+    return;
+  }
+  LOGI("[mDNS] OK %s.local", hostname_.c_str());
+}
+
+static void setupOTA() {
+  ArduinoOTA.setHostname(hostname_.c_str());
+  ArduinoOTA
+      .onStart([]() {
+        auto cmd = ArduinoOTA.getCommand();
+        LOGI("[OTA] Start updating %s", cmd == U_FLASH    ? "sketch"
+                                        : cmd == U_SPIFFS ? "filesystem"
+                                                          : "unknown");
+      })
+      .onEnd([]() { LOGI("\nEnd"); })
+      .onProgress([](unsigned int progress, unsigned int total) {
+        LOGI("[OTA] Progress: %u%%", 100 * progress / total);
+      })
+      .onError([](ota_error_t error) { LOGI("[OTA] Error: %d", error); });
+
+  ArduinoOTA.begin();
+}
+
 void setup() {
   led_.setBackground(RgbLed::Color::Green);
 
@@ -147,8 +196,18 @@ void setup() {
   /* Preferences */
   loadPreferences();
 
+  /* OTA and mDNS */
+  WiFi.begin();  // cached SSID
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
+      LOGI("WiFi connected, IP: %s", WiFi.localIP().toString().c_str());
+    }
+  });
+  setupOTA();
+  setupMDNS();
+
   /* IR */
-  ir_remote_.begin(PIN_IR_TRANSMITTER, PIN_IR_RECEIVER);
+  ir_remote_.begin(CONFIG_APP_PIN_IR_TRANSMITTER, CONFIG_APP_PIN_IR_RECEIVER);
 
   /* Matter Endpoints */
   matter_light_.begin(true);
@@ -168,6 +227,7 @@ void setup() {
       delay(100);
       if ((timeCount++ % 50) == 0)
         LOGI("Matter commissioning is in progress ...");
+      ArduinoOTA.handle();
     }
     LOGI("Matter Node is commissioned successfully.");
   }
@@ -184,6 +244,7 @@ void loop() {
   command_parser_.update();
   brightness_sensor_.update();
   ir_remote_.handle();
+  ArduinoOTA.handle();
 
   /* button state */
   if (btn_.pressed()) LOGI("[Button] pressed");
@@ -207,7 +268,8 @@ void loop() {
 
   /* occupancy sensor */
   int seconds_since_last_motion = motion_sensor_.getSecondsSinceLastMotion();
-  bool occupancy_state = seconds_since_last_motion < OCCUPANCY_TIMEOUT_SECONDS;
+  bool occupancy_state =
+      seconds_since_last_motion < CONFIG_APP_OCCUPANCY_TIMEOUT_SECONDS;
 
   /* MatterLight: sync matter switch */
   if (last_matter_light != matter_light_) {
@@ -293,7 +355,11 @@ void loop() {
   }
 
   /* Status LED */
-  if (matter_motion_switch_) {
+  if (!Matter.isDeviceCommissioned()) {
+    led_.setBackground(RgbLed::Color::Magenta);
+  } else if (!WiFi.isConnected()) {
+    led_.setBackground(RgbLed::Color::Red);
+  } else if (matter_motion_switch_) {
     if (!matter_light_ && ambient_light_mode_enabled_ &&
         brightness_sensor_.isBright()) {
       led_.setBackground(RgbLed::Color::Yellow);
@@ -444,17 +510,6 @@ void matterEventCallback(matterEvent_t event,
           break;
         case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Lost:
           LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Lost)");
-          led_.setBackground(RgbLed::Color::Red);
-          break;
-        default:
-          break;
-      }
-      switch (data->InternetConnectivityChange.IPv6) {
-        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
-          LOGW("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Est)");
-          break;
-        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
-          LOGE("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
           led_.setBackground(RgbLed::Color::Red);
           break;
         default:
