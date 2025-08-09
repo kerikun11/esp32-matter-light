@@ -4,10 +4,8 @@
  */
 #include <Arduino.h>
 #include <ArduinoOTA.h>
-#include <ESPmDNS.h>
 #include <Matter.h>
 #include <Preferences.h>
-#include <WiFi.h>
 
 #include "app_config.h"
 #include "app_log.h"
@@ -80,6 +78,7 @@ static void handle_commands() {
     }
     hostname_ = tokens[1];
     prefs_.putString(PREFERENCES_KEY_HOSTNAME, hostname_.c_str());
+    LOGI("Hostname set to: %s", hostname_.c_str());
   } else if (command == "record" || command == "r") {
     if (tokens.size() < 2) {
       LOGE("Usage: record <on|off>");
@@ -161,16 +160,9 @@ static void loadPreferences() {
   LOGI("IR Data Light OFF: %zu", ir_data_light_off_.size());
 }
 
-static void setupMDNS() {
-  if (!MDNS.begin(hostname_.c_str())) {
-    LOGE("[mDNS] begin() failed");
-    return;
-  }
-  LOGI("[mDNS] OK %s.local", hostname_.c_str());
-}
-
 static void setupOTA() {
   ArduinoOTA.setHostname(hostname_.c_str());
+  ArduinoOTA.setMdnsEnabled(false);  // to avoid mDNS conflicts with Matter
   ArduinoOTA
       .onStart([]() {
         auto cmd = ArduinoOTA.getCommand();
@@ -196,16 +188,6 @@ void setup() {
   /* Preferences */
   loadPreferences();
 
-  /* OTA and mDNS */
-  WiFi.begin();  // cached SSID
-  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
-    if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
-      LOGI("WiFi connected, IP: %s", WiFi.localIP().toString().c_str());
-    }
-  });
-  setupOTA();
-  setupMDNS();
-
   /* IR */
   ir_remote_.begin(CONFIG_APP_PIN_IR_TRANSMITTER, CONFIG_APP_PIN_IR_RECEIVER);
 
@@ -216,6 +198,9 @@ void setup() {
   /* Matter */
   Matter.onEvent(matterEventCallback);
   Matter.begin();
+
+  /* OTA */
+  setupOTA();
 
   /* Matter Commissioning */
   if (!Matter.isDeviceCommissioned()) {
@@ -357,7 +342,7 @@ void loop() {
   /* Status LED */
   if (!Matter.isDeviceCommissioned()) {
     led_.setBackground(RgbLed::Color::Magenta);
-  } else if (!WiFi.isConnected()) {
+  } else if (!Matter.isDeviceConnected()) {
     led_.setBackground(RgbLed::Color::Red);
   } else if (matter_motion_switch_) {
     if (!matter_light_ && ambient_light_mode_enabled_ &&

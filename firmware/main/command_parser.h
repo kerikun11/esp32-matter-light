@@ -13,26 +13,35 @@
 
 class CommandParser {
  public:
-  explicit CommandParser(Stream& io, size_t maxLineLen = 128)
-      : io_(io), maxLen_(maxLineLen) {}
+  explicit CommandParser(Stream& io) : io_(io) {}
 
   void update() {
     while (io_.available()) {
       char c = (char)io_.read();
-      io_.print(c);
-      if (c == '\r' || c == '\n') {
-        if (!line_.empty()) {
-          queue_.push_back(split(line_));
-          line_.clear();
-        }
-      } else {
-        if (line_.size() + 1 < maxLen_)
+      switch (c) {
+        case '\n':
+        case '\r':
+          if (!line_.empty()) {
+            queue_.push_back(split(line_));
+            line_.clear();
+          }
+          break;
+        case '\b':
+          if (!line_.empty()) line_.pop_back();
+          io_.print(" \b");  // Backspace handling
+          break;
+        case '0' ... '9':
+        case 'a' ... 'z':
+        case 'A' ... 'Z':
+        case '_':
+        case '-':
+        case ' ':
           line_.push_back(c);
-        else {
-          line_.clear();
-          io_.println(F("ERR: line too long"));
-        }
+          break;
+        default:
+          continue;
       }
+      io_.print(c);
     }
   }
 
@@ -47,7 +56,6 @@ class CommandParser {
 
  private:
   Stream& io_;
-  size_t maxLen_;
   std::string line_;
   std::deque<std::vector<std::string> > queue_;
 
