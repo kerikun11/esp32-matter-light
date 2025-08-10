@@ -28,7 +28,7 @@ class CommandParser {
           break;
         case '\b':
           if (!line_.empty()) line_.pop_back();
-          io_.print(" \b");  // Backspace handling
+          io_.print("\b ");  // erase last character
           break;
         case '0' ... '9':
         case 'a' ... 'z':

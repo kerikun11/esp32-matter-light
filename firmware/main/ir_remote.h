@@ -26,7 +26,7 @@ class IRRemote {
   void send(const IRData& data);
 
   static bool isIrDataEqual(const IRData& a, const IRData& b,
-                            float tolerance_percent = 20.0f);
+                            float tolerance_percent = 50.0f);
 
   static bool saveToPreferences(Preferences& prefs, const char* key,
                                 const IRData& data);

@@ -45,8 +45,6 @@ static IRRemote::IRData ir_data_light_on_;
 static IRRemote::IRData ir_data_light_off_;
 
 static constexpr const char* TAG = "main";
-void matterEventCallback(matterEvent_t,
-                         const chip::DeviceLayer::ChipDeviceEvent*);
 
 static void handle_commands() {
   if (!command_parser_.available()) return;
@@ -191,31 +189,13 @@ void setup() {
   /* IR */
   ir_remote_.begin(CONFIG_APP_PIN_IR_TRANSMITTER, CONFIG_APP_PIN_IR_RECEIVER);
 
-  /* Matter Endpoints */
+  /* Matter */
   matter_light_.begin(true);
   matter_motion_switch_.begin(true);
-
-  /* Matter */
-  Matter.onEvent(matterEventCallback);
   Matter.begin();
 
   /* OTA */
   setupOTA();
-
-  /* Matter Commissioning */
-  if (!Matter.isDeviceCommissioned()) {
-    LOGI("Matter pairing code: %s", Matter.getManualPairingCode().c_str());
-    LOGI("Matter QR code URL: %s", Matter.getOnboardingQRCodeUrl().c_str());
-    led_.setBackground(RgbLed::Color::Magenta);
-    uint32_t timeCount = 0;
-    while (!Matter.isDeviceCommissioned()) {
-      delay(100);
-      if ((timeCount++ % 50) == 0)
-        LOGI("Matter commissioning is in progress ...");
-      ArduinoOTA.handle();
-    }
-    LOGI("Matter Node is commissioned successfully.");
-  }
 }
 
 void loop() {
@@ -235,15 +215,6 @@ void loop() {
   if (btn_.pressed()) LOGI("[Button] pressed");
   if (btn_.longPressed()) LOGI("[Button] long pressed");
   if (btn_.longHoldStarted()) LOGI("[Button] long hold started");
-
-  /* button (long hold): matter decommissioning */
-  if (btn_.longPressed()) {
-    LOGI("Decommissioning Matter Node...");
-    led_.setBackground(RgbLed::Color::Magenta);
-    Matter.decommission();
-    delay(1000);
-    ESP.restart();
-  }
 
   /* button pressed: toggle matter switch */
   if (btn_.pressed()) {
@@ -302,20 +273,20 @@ void loop() {
     ir_remote_.clear();
     if (IRRemote::isIrDataEqual(ir_data, ir_data_light_on_)) {
       LOGI("[IR] Light ON Signal Received");
-      if (matter_light_) {
-        matter_motion_switch_.toggle();
-      } else {
+      if (!matter_light_) {
         matter_light_ = true;
         matter_motion_switch_ = true;
+      } else {
+        matter_motion_switch_.toggle();
       }
       led_.blinkOnce(RgbLed::Color::Cyan);
     } else if (IRRemote::isIrDataEqual(ir_data, ir_data_light_off_)) {
       LOGI("[IR] Light OFF Signal Received");
-      if (!matter_light_) {
-        matter_motion_switch_.toggle();
-      } else {
+      if (matter_light_) {
         matter_light_ = false;
         matter_motion_switch_ = false;
+      } else {
+        matter_motion_switch_.toggle();
       }
       led_.blinkOnce(RgbLed::Color::Cyan);
     } else {
@@ -357,6 +328,24 @@ void loop() {
     led_.setBackground(RgbLed::Color::Off);
   }
 
+  /* Matter Commissioning */
+  if (btn_.longHoldStarted()) led_.blinkOnce(RgbLed::Color::Magenta);
+  if (btn_.longPressed()) {
+    LOGI("Decommissioning Matter Node...");
+    led_.setBackground(RgbLed::Color::Magenta);
+    Matter.decommission();
+    delay(1000);
+    ESP.restart();
+  }
+  if (!Matter.isDeviceCommissioned()) {
+    static long last_millis = 0;
+    if (millis() - last_millis > 10000) {
+      last_millis = millis();
+      LOGI("Matter QR Code URL: %s", Matter.getOnboardingQRCodeUrl().c_str());
+      LOGI("Matter Pairing Code: %s", Matter.getManualPairingCode().c_str());
+    }
+  }
+
   /* Command Parser */
   handle_commands();
 
@@ -365,147 +354,4 @@ void loop() {
 
   /* WDT Yield */
   delay(1);
-}
-
-const char* matterEventToString(uint16_t eventType) {
-  switch (eventType) {
-    case MATTER_WIFI_CONNECTIVITY_CHANGE:
-      return "MATTER_WIFI_CONNECTIVITY_CHANGE";
-    case MATTER_THREAD_CONNECTIVITY_CHANGE:
-      return "MATTER_THREAD_CONNECTIVITY_CHANGE";
-    case MATTER_INTERNET_CONNECTIVITY_CHANGE:
-      return "MATTER_INTERNET_CONNECTIVITY_CHANGE";
-    case MATTER_SERVICE_CONNECTIVITY_CHANGE:
-      return "MATTER_SERVICE_CONNECTIVITY_CHANGE";
-    case MATTER_SERVICE_PROVISIONING_CHANGE:
-      return "MATTER_SERVICE_PROVISIONING_CHANGE";
-    case MATTER_TIME_SYNC_CHANGE:
-      return "MATTER_TIME_SYNC_CHANGE";
-    case MATTER_CHIPOBLE_CONNECTION_ESTABLISHED:
-      return "MATTER_CHIPOBLE_CONNECTION_ESTABLISHED";
-    case MATTER_CHIPOBLE_CONNECTION_CLOSED:
-      return "MATTER_CHIPOBLE_CONNECTION_CLOSED";
-    case MATTER_CLOSE_ALL_BLE_CONNECTIONS:
-      return "MATTER_CLOSE_ALL_BLE_CONNECTIONS";
-    case MATTER_WIFI_DEVICE_AVAILABLE:
-      return "MATTER_WIFI_DEVICE_AVAILABLE";
-    case MATTER_OPERATIONAL_NETWORK_STARTED:
-      return "MATTER_OPERATIONAL_NETWORK_STARTED";
-    case MATTER_THREAD_STATE_CHANGE:
-      return "MATTER_THREAD_STATE_CHANGE";
-    case MATTER_THREAD_INTERFACE_STATE_CHANGE:
-      return "MATTER_THREAD_INTERFACE_STATE_CHANGE";
-    case MATTER_CHIPOBLE_ADVERTISING_CHANGE:
-      return "MATTER_CHIPOBLE_ADVERTISING_CHANGE";
-    case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
-      return "MATTER_INTERFACE_IP_ADDRESS_CHANGED";
-    case MATTER_COMMISSIONING_COMPLETE:
-      return "MATTER_COMMISSIONING_COMPLETE";
-    case MATTER_FAIL_SAFE_TIMER_EXPIRED:
-      return "MATTER_FAIL_SAFE_TIMER_EXPIRED";
-    case MATTER_OPERATIONAL_NETWORK_ENABLED:
-      return "MATTER_OPERATIONAL_NETWORK_ENABLED";
-    case MATTER_DNSSD_INITIALIZED:
-      return "MATTER_DNSSD_INITIALIZED";
-    case MATTER_DNSSD_RESTART_NEEDED:
-      return "MATTER_DNSSD_RESTART_NEEDED";
-    case MATTER_BINDINGS_CHANGED_VIA_CLUSTER:
-      return "MATTER_BINDINGS_CHANGED_VIA_CLUSTER";
-    case MATTER_OTA_STATE_CHANGED:
-      return "MATTER_OTA_STATE_CHANGED";
-    case MATTER_SERVER_READY:
-      return "MATTER_SERVER_READY";
-    case MATTER_BLE_DEINITIALIZED:
-      return "MATTER_BLE_DEINITIALIZED";
-    case MATTER_COMMISSIONING_SESSION_STARTED:
-      return "MATTER_COMMISSIONING_SESSION_STARTED";
-    case MATTER_COMMISSIONING_SESSION_STOPPED:
-      return "MATTER_COMMISSIONING_SESSION_STOPPED";
-    case MATTER_COMMISSIONING_WINDOW_OPEN:
-      return "MATTER_COMMISSIONING_WINDOW_OPEN";
-    case MATTER_COMMISSIONING_WINDOW_CLOSED:
-      return "MATTER_COMMISSIONING_WINDOW_CLOSED";
-    case MATTER_FABRIC_WILL_BE_REMOVED:
-      return "MATTER_FABRIC_WILL_BE_REMOVED";
-    case MATTER_FABRIC_REMOVED:
-      return "MATTER_FABRIC_REMOVED";
-    case MATTER_FABRIC_COMMITTED:
-      return "MATTER_FABRIC_COMMITTED";
-    case MATTER_FABRIC_UPDATED:
-      return "MATTER_FABRIC_UPDATED";
-    case MATTER_ESP32_PUBLIC_SPECIFIC_EVENT:
-      return "MATTER_ESP32_PUBLIC_SPECIFIC_EVENT";
-    default:
-      return "UNKNOWN_EVENT";
-  }
-}
-
-void matterEventCallback(matterEvent_t event,
-                         const chip::DeviceLayer::ChipDeviceEvent* data) {
-  LOGW("Matter Event: %s (%d)", matterEventToString(event), event);
-  switch (event) {
-    case MATTER_WIFI_CONNECTIVITY_CHANGE:
-      switch (data->WiFiConnectivityChange.Result) {
-        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
-          LOGW("MATTER_WIFI_CONNECTIVITY_CHANGE (Est)");
-          break;
-        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
-          LOGE("MATTER_WIFI_CONNECTIVITY_CHANGE (Lost)");
-          led_.setBackground(RgbLed::Color::Red);
-          break;
-        default:
-          break;
-      }
-      break;
-    case MATTER_INTERNET_CONNECTIVITY_CHANGE:
-      switch (data->InternetConnectivityChange.IPv4) {
-        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
-          LOGW("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Est)");
-          break;
-        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
-          LOGE("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv4 Lost)");
-          led_.setBackground(RgbLed::Color::Red);
-          break;
-        default:
-          break;
-      }
-      switch (data->InternetConnectivityChange.IPv6) {
-        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Established:
-          LOGW("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Est)");
-          break;
-        case chip::DeviceLayer::ConnectivityChange::kConnectivity_Lost:
-          LOGE("MATTER_INTERNET_CONNECTIVITY_CHANGE (IPv6 Lost)");
-          led_.setBackground(RgbLed::Color::Red);
-          break;
-        default:
-          break;
-      }
-      break;
-    case MATTER_INTERFACE_IP_ADDRESS_CHANGED:
-      switch (data->InterfaceIpAddressChanged.Type) {
-        case chip::DeviceLayer::InterfaceIpChangeType::kIpV4_Assigned:
-          LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Assigned)");
-          break;
-        case chip::DeviceLayer::InterfaceIpChangeType::kIpV4_Lost:
-          LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv4 Lost)");
-          led_.setBackground(RgbLed::Color::Red);
-          break;
-        case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Assigned:
-          LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Assigned)");
-          break;
-        case chip::DeviceLayer::InterfaceIpChangeType::kIpV6_Lost:
-          LOGW("MATTER_INTERFACE_IP_ADDRESS_CHANGED (IPv6 Lost)");
-          led_.setBackground(RgbLed::Color::Red);
-          break;
-        default:
-          break;
-      }
-      break;
-    case MATTER_SERVER_READY:
-      LOGW("MATTER_SERVER_READY");
-      led_.setBackground(RgbLed::Color::White);
-      break;
-    default:
-      break;
-  }
 }
