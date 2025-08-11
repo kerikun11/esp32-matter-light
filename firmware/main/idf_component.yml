@@ -1,3 +1,4 @@
+# https://github.com/espressif/esp-idf
 dependencies:
   espressif/esp_matter: # https://github.com/espressif/esp-matter.git
     version: ">=1.4.0"
