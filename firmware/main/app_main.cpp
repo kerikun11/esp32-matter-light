@@ -279,6 +279,7 @@ void loop() {
       } else {
         matter_motion_switch_.toggle();
       }
+      LOGW("MatterMotionSwitch: %d (IR)", matter_motion_switch_.getOnOff());
       led_.blinkOnce(RgbLed::Color::Cyan);
     } else if (IRRemote::isIrDataEqual(ir_data, ir_data_light_off_)) {
       LOGI("[IR] Light OFF Signal Received");
@@ -288,11 +289,11 @@ void loop() {
       } else {
         matter_motion_switch_.toggle();
       }
+      LOGW("MatterMotionSwitch: %d (IR)", matter_motion_switch_.getOnOff());
       led_.blinkOnce(RgbLed::Color::Cyan);
     } else {
       LOGW("[IR] Unknown Signal Received");
     }
-    LOGW("MatterMotionSwitch: %d (IR)", matter_motion_switch_.getOnOff());
   }
 
   /* IR transmitter */
