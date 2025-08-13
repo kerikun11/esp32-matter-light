@@ -2,7 +2,7 @@
 
 Matterスマートホーム対応、人感センサ付き照明コントローラ（赤外線学習リモコン）。
 
-![実機](images/esp32-matter-light-perspective-2.jpg)
+![実機](images/esp32-matter-light-perspective-1.jpg)
 
 - 対応マイコン一覧
   - ESP32-C6
