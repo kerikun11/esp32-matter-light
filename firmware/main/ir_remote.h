@@ -9,7 +9,7 @@
 
 class IRRemote {
  public:
-  static constexpr const int IR_RECEIVE_TIMEOUT_US = 100'000;
+  static constexpr const int IR_RECEIVE_TIMEOUT_US = 40'000;
   static constexpr const int RAW_DATA_BUFFER_SIZE = 800;
   static constexpr const int RAW_DATA_MIN_SIZE = 8;
   using IRDataElement = uint16_t;
