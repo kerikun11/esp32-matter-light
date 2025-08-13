@@ -9,9 +9,10 @@
 
 class IRRemote {
  public:
-  static constexpr const int IR_RECEIVE_TIMEOUT_US = 40'000;
   static constexpr const int RAW_DATA_BUFFER_SIZE = 800;
   static constexpr const int RAW_DATA_MIN_SIZE = 8;
+  static constexpr const int RAW_DATA_TIMEOUT_US = 40'000;
+  static constexpr const int IR_FINALIZING_TIMEOUT_US = 100'000;
   using IRDataElement = uint16_t;
   using IRData = std::vector<IRDataElement>;
 
@@ -25,6 +26,7 @@ class IRRemote {
 
   void send(const IRData& data);
 
+  static void print(const IRData& data, const char* label = NULL);
   static bool isIrDataEqual(const IRData& a, const IRData& b,
                             float tolerance_percent = 50.0f);
 
@@ -38,7 +40,7 @@ class IRRemote {
     IR_RECEIVER_OFF,
     IR_RECEIVER_READY,
     IR_RECEIVER_RECEIVING,
-    IR_RECEIVER_READING,
+    IR_RECEIVER_FINALIZING,
     IR_RECEIVER_AVAILABLE,
   };
 
@@ -57,11 +59,11 @@ class IRRemote {
 void IRRemote::begin(int tx, int rx) {
   pin_tx_ = tx;
   pin_rx_ = rx;
+  state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
   pinMode(pin_tx_, OUTPUT);
   pinMode(pin_rx_, INPUT);
   digitalWrite(pin_tx_, LOW);
   attachInterruptArg(pin_rx_, isrEntryPoint, this, CHANGE);
-  state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
 }
 
 void IRRemote::isrEntryPoint(void* this_ptr) {
@@ -111,7 +113,7 @@ void IRRemote::send(const IRData& data) {
     state_ = state_cache;
   }
   interrupts();
-  LOGI("[IR] Send OK (size: %zu)", data.size());
+  LOGD("[IR] Send OK (size: %zu)", data.size());
 }
 
 void IRRemote::isr() {
@@ -120,28 +122,16 @@ void IRRemote::isr() {
 
   switch (state_) {
     case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
+    case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
+    case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
       break;
     case IR_RECEIVER_STATE::IR_RECEIVER_READY:
-      state_ = IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING;
       raw_index_ = 0;
+      state_ = IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING;
       break;
     case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
-      while (diff > 0xFFFF) {
-        if (raw_index_ > RAW_DATA_BUFFER_SIZE - 2) {
-          break;
-        }
-        raw_data_[raw_index_++] = 0xFFFF;
-        raw_data_[raw_index_++] = 0;
-        diff -= 0xFFFF;
-      }
-      if (raw_index_ > RAW_DATA_BUFFER_SIZE - 1) {
-        break;
-      }
+      if (raw_index_ > RAW_DATA_BUFFER_SIZE - 1) break;
       raw_data_[raw_index_++] = diff;
-      break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_READING:
-      break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
       break;
   }
 
@@ -155,16 +145,15 @@ void IRRemote::handle() {
 
   switch (state_) {
     case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
-    case IR_RECEIVER_STATE::IR_RECEIVER_READY:
     case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
+    case IR_RECEIVER_STATE::IR_RECEIVER_READY:
       break;
     case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
-      if (diff > IR_RECEIVE_TIMEOUT_US) {
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_READING;
-        LOGI("[IR] End Receiving");
-      }
+      if (diff > RAW_DATA_TIMEOUT_US)
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
       break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_READING:
+    case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
+      if (diff < IR_FINALIZING_TIMEOUT_US) break;
       if (raw_index_ < RAW_DATA_MIN_SIZE) {
         LOGI("[IR] Raw Data Size: %d (skipped)", raw_index_);
         state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
@@ -175,14 +164,21 @@ void IRRemote::handle() {
         break;
       }
       LOGI("[IR] Raw Data Size: %d", raw_index_);
-      for (int i = 0; i < raw_index_; i++) {
-        printf("%d", raw_data_[i]);
-        if (i != raw_index_ - 1) printf(",");
-      }
-      printf("\n");
       state_ = IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
       break;
   }
+}
+
+void IRRemote::print(const IRData& data, const char* label) {
+  if (label)
+    LOGI("[IR] Raw Data (size: %zu) %s", data.size(), label);
+  else
+    LOGI("[IR] Raw Data (size: %zu)", data.size());
+  for (int i = 0; i < data.size(); ++i) {
+    printf("%d", data[i]);
+    if (i != data.size() - 1) printf(",");
+  }
+  printf("\n");
 }
 
 bool IRRemote::isIrDataEqual(const IRData& a, const IRData& b,
@@ -201,12 +197,14 @@ bool IRRemote::isIrDataEqual(const IRData& a, const IRData& b,
 
 bool IRRemote::saveToPreferences(Preferences& prefs, const char* key,
                                  const IRData& data) {
+  print(data, key);
   size_t size = data.size() * sizeof(IRDataElement);
   return size == prefs.putBytes(key, data.data(), size);
 }
 
 bool IRRemote::loadFromPreferences(Preferences& prefs, const char* key,
                                    IRData& data) {
+  print(data, key);
   size_t size = prefs.getBytesLength(key);
   if (size == 0) return false;
   data.resize(size / sizeof(IRDataElement));

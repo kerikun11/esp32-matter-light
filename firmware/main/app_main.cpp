@@ -229,12 +229,13 @@ void loop() {
 
   /* MatterLight: sync matter switch */
   if (last_matter_light != matter_light_) {
-    matter_motion_switch_ = matter_light_;
-    LOGW("MatterMotionSwitch: %d (MatterLight)",
-         matter_motion_switch_.getOnOff());
-    if (!occupancy_state) {
+    if (occupancy_state) {
+      matter_motion_switch_ = matter_light_;
+      LOGW("MatterMotionSwitch: %d (MatterLight)",
+           matter_motion_switch_.getOnOff());
+    } else {
       matter_motion_switch_ = !matter_light_;
-      LOGW("MatterMotionSwitch: %d (No Motion)",
+      LOGW("MatterMotionSwitch: %d (MatterLight and No Motion)",
            matter_motion_switch_.getOnOff());
     }
   }
@@ -252,18 +253,6 @@ void loop() {
         seconds_since_last_motion > light_off_timeout_seconds_) {
       matter_light_ = false;
       LOGW("MatterLight: %d (Occupancy Sensor)", matter_light_.getOnOff());
-    }
-  }
-
-  /* matter occupancy sensor */
-  if (last_occupancy_state != occupancy_state) {
-    last_occupancy_state = occupancy_state;
-    if (occupancy_state) {
-      LOGW("[PIR] Motion Detected");
-      if (matter_motion_switch_) led_.blinkOnce(RgbLed::Color::Blue);
-    } else {
-      LOGW("[PIR] No Motion Timeout");
-      if (matter_motion_switch_) led_.blinkOnce(RgbLed::Color::Blue);
     }
   }
 
@@ -293,22 +282,36 @@ void loop() {
       led_.blinkOnce(RgbLed::Color::Cyan);
     } else {
       LOGW("[IR] Unknown Signal Received");
+      IRRemote::print(ir_data);
     }
   }
+  last_matter_light = matter_light_;
 
   /* IR transmitter */
   if (light_state_last != matter_light_) {
     light_state_last = matter_light_;
     if (light_state_last) {
-      LOGW("[IR] Light ON");
+      LOGW("[IR] Light ON (size: %zu)", ir_data_light_on_.size());
       led_.blinkOnce(RgbLed::Color::Green);
       ir_remote_.send(ir_data_light_on_);
     } else {
-      LOGW("[IR] Light OFF");
+      LOGW("[IR] Light OFF (size: %zu)", ir_data_light_off_.size());
       led_.blinkOnce(RgbLed::Color::Green);
       ir_remote_.send(ir_data_light_off_);
     }
-    delay(200);
+    delay(100);
+  }
+
+  /* show occupancy sensor state */
+  if (last_occupancy_state != occupancy_state) {
+    last_occupancy_state = occupancy_state;
+    if (occupancy_state) {
+      LOGW("[PIR] Motion Detected");
+      // if (matter_motion_switch_) led_.blinkOnce(RgbLed::Color::Blue);
+    } else {
+      LOGW("[PIR] No Motion Timeout");
+      // if (matter_motion_switch_) led_.blinkOnce(RgbLed::Color::Blue);
+    }
   }
 
   /* Status LED */
@@ -349,9 +352,6 @@ void loop() {
 
   /* Command Parser */
   handle_commands();
-
-  /* Update Vars */
-  last_matter_light = matter_light_;
 
   /* WDT Yield */
   delay(1);
