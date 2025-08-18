@@ -47,6 +47,7 @@ class SmartLightController {
   bool last_light_state_ = false;
   bool last_switch_state_ = false;
   bool last_occupancy_state_ = false;
+  uint64_t last_light_state_change_ms_ = 0;
 
   static constexpr const char* TAG = "SmartLightController";
   static constexpr const char* PREF_PARTITION = "matter";
@@ -68,12 +69,18 @@ class SmartLightController {
 void SmartLightController::begin() {
   led_.setBackground(RgbLed::Color::Green);
 
+  /* nvs params */
   loadPreferences();
+
+  /* hardware */
   ir_remote_.begin(CONFIG_APP_PIN_IR_TRANSMITTER, CONFIG_APP_PIN_IR_RECEIVER);
 
+  /* matter */
   matter_light_.begin(true, true);
   last_light_state_ = !true;  // force trigger
+  last_switch_state_ = true;
 
+  /* ota */
   setupOta();
 }
 
@@ -133,6 +140,15 @@ void SmartLightController::handle() {
     }
   }
 
+  /* auto switch ON */
+  if (ambient_light_mode_enabled_ && brightness_sensor_.isBright() &&
+      !light_state && !switch_state &&
+      millis() - last_light_state_change_ms_ >
+          CONFIG_APP_BRIGHT_SWITCH_ON_TIMEOUT_SECONDS * 1000) {
+    switch_state = true;
+    LOGW("[SwitchState] %d (Ambient Light Mode)", switch_state);
+  }
+
   /* SwitchState sync matter light to occupancy sensor */
   if (switch_state) {
     /* Light ON */
@@ -184,6 +200,7 @@ void SmartLightController::handle() {
     last_light_state_ = light_state;
     matter_light_.setLightState(light_state);
     light_state_changed = true;
+    last_light_state_change_ms_ = millis();
   }
 
   /* update switch state */
@@ -245,8 +262,11 @@ void SmartLightController::loadPreferences() {
   ambient_light_mode_enabled_ = prefs_.getBool(PREF_AMBIENT, true);
   IRRemote::loadFromPreferences(prefs_, PREF_IR_ON, ir_data_light_on_);
   IRRemote::loadFromPreferences(prefs_, PREF_IR_OFF, ir_data_light_off_);
-  LOGI("[%s] IR ON size: %zu", TAG, ir_data_light_on_.size());
-  LOGI("[%s] IR OFF size: %zu", TAG, ir_data_light_off_.size());
+  LOGI("[Prefs] hostname_: %s", hostname_.c_str());
+  LOGI("[Prefs] light_off_timeout_seconds_: %d", light_off_timeout_seconds_);
+  LOGI("[Prefs] ambient_light_mode_enabled_: %d", ambient_light_mode_enabled_);
+  LOGI("[Prefs] IR ON Data size: %zu", ir_data_light_on_.size());
+  LOGI("[Prefs] IR OFF Data size: %zu", ir_data_light_off_.size());
 }
 
 void SmartLightController::setupOta() {
