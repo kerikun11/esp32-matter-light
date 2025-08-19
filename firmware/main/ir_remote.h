@@ -199,10 +199,10 @@ bool IRRemote::saveToPreferences(Preferences& prefs, const char* key,
 
 bool IRRemote::loadFromPreferences(Preferences& prefs, const char* key,
                                    IRData& data) {
-  print(data, key);
   size_t size = prefs.getBytesLength(key);
   if (size == 0) return false;
   data.resize(size / sizeof(IRDataElement));
   prefs.getBytes(key, data.data(), size);
+  print(data, key);
   return true;
 }
