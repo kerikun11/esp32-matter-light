@@ -18,7 +18,6 @@ class IRRemote {
 
   void begin(int tx, int rx);
 
-  void handle();
   void clear();
   bool available();
   bool waitForAvailable(int timeout_ms = -1);
@@ -45,7 +44,7 @@ class IRRemote {
   };
 
   int pin_tx_, pin_rx_;
-  volatile enum IR_RECEIVER_STATE state_;
+  volatile IR_RECEIVER_STATE state_;
   uint16_t raw_index_;
   uint16_t raw_data_[RAW_DATA_BUFFER_SIZE];
   uint32_t prev_us_;
@@ -67,10 +66,36 @@ void IRRemote::begin(int tx, int rx) {
 }
 
 void IRRemote::isrEntryPoint(void* this_ptr) {
-  reinterpret_cast<IRRemote*>(this_ptr)->isr();
+  static_cast<IRRemote*>(this_ptr)->isr();
 }
 
 bool IRRemote::available() {
+  uint32_t diff = micros() - prev_us_;
+  switch (state_) {
+    case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
+    case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
+    case IR_RECEIVER_STATE::IR_RECEIVER_READY:
+      break;
+    case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
+      if (diff > RAW_DATA_TIMEOUT_US)
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
+      break;
+    case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
+      if (diff < IR_FINALIZING_TIMEOUT_US) break;
+      if (raw_index_ < RAW_DATA_MIN_SIZE) {
+        LOGD("[IR] Raw Data Size: %d (skipped)", raw_index_);
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
+        break;
+      } else if (raw_index_ >= RAW_DATA_BUFFER_SIZE) {
+        LOGE("[IR] Raw Data Size: %d (overflow)", raw_index_);
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
+        break;
+      }
+      LOGI("[IR] Raw Data Size: %d", raw_index_);
+      state_ = IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
+      break;
+  }
+
   return state_ == IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
 }
 
@@ -80,7 +105,6 @@ bool IRRemote::waitForAvailable(int timeout_ms) {
     if (timeout_ms > 0 && millis() - start > timeout_ms) {
       return false;
     }
-    handle();
     delay(1);
   }
   return true;
@@ -91,8 +115,8 @@ IRRemote::IRData IRRemote::get() {
 }
 
 void IRRemote::clear() {
+  LOGD("[IR] clear");
   state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
-  LOGI("[IR] clear");
 }
 
 void IRRemote::send(const IRData& data) {
@@ -132,41 +156,12 @@ void IRRemote::isr() {
     case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
       if (raw_index_ > RAW_DATA_BUFFER_SIZE - 1) break;
       raw_data_[raw_index_++] = diff;
+      if (diff > RAW_DATA_TIMEOUT_US)
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
       break;
   }
 
   prev_us_ = us;
-}
-
-void IRRemote::handle() {
-  noInterrupts();
-  uint32_t diff = micros() - prev_us_;
-  interrupts();
-
-  switch (state_) {
-    case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
-    case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
-    case IR_RECEIVER_STATE::IR_RECEIVER_READY:
-      break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
-      if (diff > RAW_DATA_TIMEOUT_US)
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
-      break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
-      if (diff < IR_FINALIZING_TIMEOUT_US) break;
-      if (raw_index_ < RAW_DATA_MIN_SIZE) {
-        LOGD("[IR] Raw Data Size: %d (skipped)", raw_index_);
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
-        break;
-      } else if (raw_index_ >= RAW_DATA_BUFFER_SIZE) {
-        LOGE("[IR] Raw Data Size: %d (overflow)", raw_index_);
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
-        break;
-      }
-      LOGI("[IR] Raw Data Size: %d", raw_index_);
-      state_ = IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
-      break;
-  }
 }
 
 void IRRemote::print(const IRData& data, const char* label) {

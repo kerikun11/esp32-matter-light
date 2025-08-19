@@ -65,7 +65,6 @@ class SmartLightController {
   void setupOta();
 
   void handleCommands();
-  void handleCommissioning();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -91,10 +90,9 @@ void SmartLightController::begin() {
 void SmartLightController::handle() {
   ArduinoOTA.handle();
   handleCommands();
-  handleCommissioning();
 
   btn_.update();
-  ir_remote_.handle();
+  led_.update();
   brightness_sensor_.update();
 
   /* matter event */
@@ -253,7 +251,20 @@ void SmartLightController::handle() {
   } else {
     led_.setBackground(RgbLed::Color::Off);
   }
-  led_.update();
+
+  /* Matter Decommission */
+  if (btn_.longHoldStarted()) led_.blinkOnce(RgbLed::Color::Magenta);
+  if (btn_.longPressed()) {
+    matter_light_.decommission();
+  }
+  if (!matter_light_.isCommissioned()) {
+    static long last_pairing_log_ms_ = 0;
+    long now = millis();
+    if (now - last_pairing_log_ms_ > 10000) {
+      last_pairing_log_ms_ = now;
+      matter_light_.printOnboarding();
+    }
+  }
 }
 
 void SmartLightController::loadPreferences() {
@@ -264,9 +275,9 @@ void SmartLightController::loadPreferences() {
   ambient_light_mode_enabled_ = prefs_.getBool(PREF_AMBIENT, true);
   IRRemote::loadFromPreferences(prefs_, PREF_IR_ON, ir_data_light_on_);
   IRRemote::loadFromPreferences(prefs_, PREF_IR_OFF, ir_data_light_off_);
-  LOGI("[Prefs] hostname_: %s", hostname_.c_str());
-  LOGI("[Prefs] light_off_timeout_seconds_: %d", light_off_timeout_seconds_);
-  LOGI("[Prefs] ambient_light_mode_enabled_: %d", ambient_light_mode_enabled_);
+  LOGI("[Prefs] hostname: %s", hostname_.c_str());
+  LOGI("[Prefs] light_off_timeout_seconds: %d", light_off_timeout_seconds_);
+  LOGI("[Prefs] ambient_light_mode_enabled: %d", ambient_light_mode_enabled_);
   LOGI("[Prefs] IR ON Data size: %zu", ir_data_light_on_.size());
   LOGI("[Prefs] IR OFF Data size: %zu", ir_data_light_off_.size());
 }
@@ -366,20 +377,5 @@ void SmartLightController::handleCommands() {
       ambient_light_mode_enabled_ = false;
     prefs_.putBool(PREF_AMBIENT, ambient_light_mode_enabled_);
     return;
-  }
-}
-
-void SmartLightController::handleCommissioning() {
-  if (btn_.longHoldStarted()) led_.blinkOnce(RgbLed::Color::Magenta);
-  if (btn_.longPressed()) {
-    matter_light_.decommission();
-  }
-  if (!matter_light_.isCommissioned()) {
-    static long last_pairing_log_ms_ = 0;
-    long now = millis();
-    if (now - last_pairing_log_ms_ > 10000) {
-      last_pairing_log_ms_ = now;
-      matter_light_.printOnboarding();
-    }
   }
 }
