@@ -155,9 +155,11 @@ void IRRemote::isr() {
       break;
     case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
       if (raw_index_ > RAW_DATA_BUFFER_SIZE - 1) break;
-      raw_data_[raw_index_++] = diff;
-      if (diff > RAW_DATA_TIMEOUT_US)
+      if (diff > RAW_DATA_TIMEOUT_US) {
         state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
+        break;
+      }
+      raw_data_[raw_index_++] = diff;
       break;
   }
 
