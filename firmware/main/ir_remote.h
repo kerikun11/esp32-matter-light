@@ -37,8 +37,9 @@ class IRRemote {
  private:
   enum class IR_RECEIVER_STATE {
     IR_RECEIVER_OFF,
-    IR_RECEIVER_READY,
+    IR_RECEIVER_START,
     IR_RECEIVER_RECEIVING,
+    IR_RECEIVER_WAITING_BLANK,
     IR_RECEIVER_FINALIZING,
     IR_RECEIVER_AVAILABLE,
   };
@@ -47,7 +48,7 @@ class IRRemote {
   volatile IR_RECEIVER_STATE state_;
   uint16_t raw_index_;
   uint16_t raw_data_[RAW_DATA_BUFFER_SIZE];
-  uint32_t prev_us_;
+  uint64_t prev_us_;
 
   void isr();
   static void IRAM_ATTR isrEntryPoint(void* this_ptr);
@@ -58,44 +59,49 @@ class IRRemote {
 void IRRemote::begin(int tx, int rx) {
   pin_tx_ = tx;
   pin_rx_ = rx;
-  state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
+  state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
   pinMode(pin_tx_, OUTPUT);
   pinMode(pin_rx_, INPUT);
   digitalWrite(pin_tx_, LOW);
   attachInterruptArg(pin_rx_, isrEntryPoint, this, CHANGE);
 }
 
-void IRRemote::isrEntryPoint(void* this_ptr) {
-  static_cast<IRRemote*>(this_ptr)->isr();
+void IRRemote::clear() {
+  LOGD("[IR] clear");
+  state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
 }
 
 bool IRRemote::available() {
+  noInterrupts();
   uint32_t diff = micros() - prev_us_;
+  interrupts();
   switch (state_) {
     case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
+    case IR_RECEIVER_STATE::IR_RECEIVER_START:
     case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
-    case IR_RECEIVER_STATE::IR_RECEIVER_READY:
       break;
     case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
       if (diff > RAW_DATA_TIMEOUT_US)
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_WAITING_BLANK;
+      break;
+    case IR_RECEIVER_STATE::IR_RECEIVER_WAITING_BLANK:
+      if (diff > IR_FINALIZING_TIMEOUT_US)
         state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
       break;
     case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
-      if (diff < IR_FINALIZING_TIMEOUT_US) break;
       if (raw_index_ < RAW_DATA_MIN_SIZE) {
         LOGD("[IR] Raw Data Size: %d (skipped)", raw_index_);
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
         break;
       } else if (raw_index_ >= RAW_DATA_BUFFER_SIZE) {
         LOGE("[IR] Raw Data Size: %d (overflow)", raw_index_);
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
         break;
       }
       LOGI("[IR] Raw Data Size: %d", raw_index_);
       state_ = IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
       break;
   }
-
   return state_ == IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
 }
 
@@ -114,9 +120,8 @@ IRRemote::IRData IRRemote::get() {
   return IRData{raw_data_, raw_data_ + raw_index_};
 }
 
-void IRRemote::clear() {
-  LOGD("[IR] clear");
-  state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
+void IRRemote::isrEntryPoint(void* this_ptr) {
+  static_cast<IRRemote*>(this_ptr)->isr();
 }
 
 void IRRemote::send(const IRData& data) {
@@ -141,7 +146,7 @@ void IRRemote::send(const IRData& data) {
 }
 
 void IRRemote::isr() {
-  uint32_t us = micros();
+  uint64_t us = micros();
   uint32_t diff = us - prev_us_;
 
   switch (state_) {
@@ -149,17 +154,20 @@ void IRRemote::isr() {
     case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
     case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
       break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_READY:
+    case IR_RECEIVER_STATE::IR_RECEIVER_START:
       raw_index_ = 0;
       state_ = IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING;
       break;
     case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
-      if (raw_index_ > RAW_DATA_BUFFER_SIZE - 1) break;
       if (diff > RAW_DATA_TIMEOUT_US) {
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_WAITING_BLANK;
         break;
       }
-      raw_data_[raw_index_++] = diff;
+      if (raw_index_ < RAW_DATA_BUFFER_SIZE) raw_data_[raw_index_++] = diff;
+      break;
+    case IR_RECEIVER_STATE::IR_RECEIVER_WAITING_BLANK:
+      if (diff > IR_FINALIZING_TIMEOUT_US)
+        state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
       break;
   }
 

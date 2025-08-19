@@ -195,23 +195,19 @@ void SmartLightController::handle() {
     }
   }
 
-  /* update light state */
-  bool light_state_changed = false;
-  if (last_light_state_ != light_state) {
-    last_light_state_ = light_state;
-    matter_light_.setLightState(light_state);
-    light_state_changed = true;
-    last_light_state_change_ms_ = millis();
-  }
-
   /* update switch state */
   if (last_switch_state_ != switch_state) {
     last_switch_state_ = switch_state;
     matter_light_.setSwitchState(switch_state);
   }
 
-  /* IR Transmitter */
-  if (light_state_changed) {
+  /* update light state */
+  if (last_light_state_ != light_state) {
+    last_light_state_ = light_state;
+    matter_light_.setLightState(light_state);
+    last_light_state_change_ms_ = millis();
+
+    /* IR Transmitter */
     if (light_state) {
       LOGW("[IR-Tx] Light ON (size: %zu)", ir_data_light_on_.size());
       led_.blinkOnce(RgbLed::Color::Green);
