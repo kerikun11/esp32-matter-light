@@ -49,13 +49,17 @@ class SmartLightController {
   bool last_occupancy_state_ = false;
   uint64_t last_light_state_change_ms_ = 0;
 
-  static constexpr const char* TAG = "SmartLightController";
   static constexpr const char* PREF_PARTITION = "matter";
   static constexpr const char* PREF_HOSTNAME = "hostname";
   static constexpr const char* PREF_TIMEOUT = "timeout";
   static constexpr const char* PREF_AMBIENT = "ambient";
   static constexpr const char* PREF_IR_ON = "ir_on";
   static constexpr const char* PREF_IR_OFF = "ir_off";
+
+  static constexpr const char* kHostnameDefault = "esp32-matter-light";
+  static constexpr const int kOccupancyTimeoutSeconds = 3;
+  static constexpr const int kLightOffTimeoutSecondsDefault = 5 * 60;  // 5min
+  static constexpr const int kAutoSwitchOnTimeoutSeconds = 3;
 
   void loadPreferences();
   void setupOta();
@@ -126,8 +130,7 @@ void SmartLightController::handle() {
 
   /* occupancy sensor */
   int seconds_since_last_motion = motion_sensor_.getSecondsSinceLastMotion();
-  bool occupancy_state =
-      seconds_since_last_motion < CONFIG_APP_OCCUPANCY_TIMEOUT_SECONDS;
+  bool occupancy_state = seconds_since_last_motion < kOccupancyTimeoutSeconds;
 
   /* LightState: sync matter switch */
   if (last_light_state_ != light_state) {
@@ -144,7 +147,7 @@ void SmartLightController::handle() {
   if (ambient_light_mode_enabled_ && brightness_sensor_.isBright() &&
       !light_state && !switch_state &&
       millis() - last_light_state_change_ms_ >
-          CONFIG_APP_BRIGHT_SWITCH_ON_TIMEOUT_SECONDS * 1000) {
+          kAutoSwitchOnTimeoutSeconds * 1000) {
     switch_state = true;
     LOGW("[SwitchState] %d (Ambient Light Mode)", switch_state);
   }
@@ -255,10 +258,9 @@ void SmartLightController::handle() {
 
 void SmartLightController::loadPreferences() {
   prefs_.begin(PREF_PARTITION);
-  hostname_ =
-      prefs_.getString(PREF_HOSTNAME, CONFIG_APP_HOSTNAME_DEFAULT).c_str();
+  hostname_ = prefs_.getString(PREF_HOSTNAME, kHostnameDefault).c_str();
   light_off_timeout_seconds_ =
-      prefs_.getInt(PREF_TIMEOUT, CONFIG_APP_LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT);
+      prefs_.getInt(PREF_TIMEOUT, kLightOffTimeoutSecondsDefault);
   ambient_light_mode_enabled_ = prefs_.getBool(PREF_AMBIENT, true);
   IRRemote::loadFromPreferences(prefs_, PREF_IR_ON, ir_data_light_on_);
   IRRemote::loadFromPreferences(prefs_, PREF_IR_OFF, ir_data_light_off_);

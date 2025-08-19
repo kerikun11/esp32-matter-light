@@ -40,11 +40,3 @@
 #else
 #error "unsupported target"
 #endif
-
-/* Hostname */
-#define CONFIG_APP_HOSTNAME_DEFAULT "esp32-matter-light"
-
-/* Timeout */
-#define CONFIG_APP_OCCUPANCY_TIMEOUT_SECONDS 3                 // 3 seconds
-#define CONFIG_APP_LIGHT_OFF_TIMEOUT_SECONDS_DEFAULT (5 * 60)  // 5 minutes
-#define CONFIG_APP_BRIGHT_SWITCH_ON_TIMEOUT_SECONDS 3          // 3 seconds
