@@ -172,7 +172,7 @@ void SmartLightController::handle() {
     const auto ir_data = ir_remote_.get();
     ir_remote_.clear();
     if (IRRemote::isIrDataEqual(ir_data, ir_data_light_on_)) {
-      LOGI("[IR] Light ON Signal Received");
+      LOGI("[IR-Rx] Light ON Signal Received");
       if (!light_state) {
         light_state = true;
         switch_state = true;
@@ -182,7 +182,7 @@ void SmartLightController::handle() {
       LOGW("[SwitchState] %d (IR)", switch_state);
       led_.blinkOnce(RgbLed::Color::Cyan);
     } else if (IRRemote::isIrDataEqual(ir_data, ir_data_light_off_)) {
-      LOGI("[IR] Light OFF Signal Received");
+      LOGI("[IR-Rx] Light OFF Signal Received");
       if (light_state) {
         light_state = false;
         switch_state = false;
@@ -192,7 +192,7 @@ void SmartLightController::handle() {
       LOGW("[SwitchState] %d (IR)", switch_state);
       led_.blinkOnce(RgbLed::Color::Cyan);
     } else {
-      LOGW("[IR] Unknown Signal Received");
+      LOGW("[IR-Rx] Unknown Signal Received");
       IRRemote::print(ir_data);
     }
   }
@@ -215,11 +215,11 @@ void SmartLightController::handle() {
   /* IR Transmitter */
   if (light_state_changed) {
     if (light_state) {
-      LOGW("[IR] Light ON (size: %zu)", ir_data_light_on_.size());
+      LOGW("[IR-Tx] Light ON (size: %zu)", ir_data_light_on_.size());
       led_.blinkOnce(RgbLed::Color::Green);
       ir_remote_.send(ir_data_light_on_);
     } else {
-      LOGW("[IR] Light OFF (size: %zu)", ir_data_light_off_.size());
+      LOGW("[IR-Tx] Light OFF (size: %zu)", ir_data_light_off_.size());
       led_.blinkOnce(RgbLed::Color::Green);
       ir_remote_.send(ir_data_light_off_);
     }
@@ -282,7 +282,8 @@ void SmartLightController::setupOta() {
   });
   ArduinoOTA.onEnd([]() { LOGI("[OTA] End"); });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    LOGI("[OTA] Progress: %u%%", 100 * progress / total);
+    LOGI("[OTA] Progress: %u%% (%d/%d)", 100 * progress / total, progress,
+         total);
   });
   ArduinoOTA.onError([](ota_error_t error) { LOGI("[OTA] Error: %d", error); });
   ArduinoOTA.begin();

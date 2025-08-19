@@ -155,7 +155,7 @@ void IRRemote::handle() {
     case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
       if (diff < IR_FINALIZING_TIMEOUT_US) break;
       if (raw_index_ < RAW_DATA_MIN_SIZE) {
-        LOGI("[IR] Raw Data Size: %d (skipped)", raw_index_);
+        LOGD("[IR] Raw Data Size: %d (skipped)", raw_index_);
         state_ = IR_RECEIVER_STATE::IR_RECEIVER_READY;
         break;
       } else if (raw_index_ >= RAW_DATA_BUFFER_SIZE) {
