@@ -59,7 +59,6 @@ class SmartLightController {
   static constexpr const char* kHostnameDefault = "esp32-matter-light";
   static constexpr const int kOccupancyTimeoutSeconds = 3;
   static constexpr const int kLightOffTimeoutSecondsDefault = 5 * 60;  // 5min
-  static constexpr const int kAutoSwitchOnTimeoutSeconds = 3;
 
   void loadPreferences();
   void setupOta();
@@ -141,15 +140,6 @@ void SmartLightController::handle() {
     }
   }
 
-  /* auto switch ON */
-  if (ambient_light_mode_enabled_ && brightness_sensor_.isBright() &&
-      !light_state && !switch_state &&
-      millis() - last_light_state_change_ms_ >
-          kAutoSwitchOnTimeoutSeconds * 1000) {
-    switch_state = true;
-    LOGW("[SwitchState] %d (Ambient Light Mode)", switch_state);
-  }
-
   /* SwitchState sync matter light to occupancy sensor */
   if (switch_state) {
     /* Light ON */
@@ -178,7 +168,7 @@ void SmartLightController::handle() {
         switch_state = !switch_state;
       }
       LOGW("[SwitchState] %d (IR)", switch_state);
-      led_.blinkOnce(RgbLed::Color::Cyan);
+      led_.blinkOnce(RgbLed::Color::Green);
     } else if (IRRemote::isIrDataEqual(ir_data, ir_data_light_off_)) {
       LOGI("[IR-Rx] Light OFF Signal Received");
       if (light_state) {
@@ -188,7 +178,7 @@ void SmartLightController::handle() {
         switch_state = !switch_state;
       }
       LOGW("[SwitchState] %d (IR)", switch_state);
-      led_.blinkOnce(RgbLed::Color::Cyan);
+      led_.blinkOnce(RgbLed::Color::Green);
     } else {
       LOGW("[IR-Rx] Unknown Signal Received");
       IRRemote::print(ir_data);
@@ -236,13 +226,16 @@ void SmartLightController::handle() {
   } else if (!matter_light_.isConnected()) {
     led_.setBackground(RgbLed::Color::Red);
   } else if (switch_state) {
-    if (!light_state && ambient_light_mode_enabled_ &&
-        brightness_sensor_.isBright()) {
-      led_.setBackground(RgbLed::Color::Yellow);
-    } else if (occupancy_state) {
-      led_.setBackground(RgbLed::Color::Blue);
+    if (ambient_light_mode_enabled_ && brightness_sensor_.isBright()) {
+      if (occupancy_state)
+        led_.setBackground(RgbLed::Color::Cyan);
+      else
+        led_.setBackground(RgbLed::Color::Yellow);
     } else {
-      led_.setBackground(RgbLed::Color::White);
+      if (occupancy_state)
+        led_.setBackground(RgbLed::Color::Blue);
+      else
+        led_.setBackground(RgbLed::Color::White);
     }
   } else {
     led_.setBackground(RgbLed::Color::Off);
