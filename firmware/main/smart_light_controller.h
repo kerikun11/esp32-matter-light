@@ -226,7 +226,8 @@ void SmartLightController::handle() {
   } else if (!matter_light_.isConnected()) {
     led_.setBackground(RgbLed::Color::Red);
   } else if (switch_state) {
-    if (ambient_light_mode_enabled_ && brightness_sensor_.isBright()) {
+    if (!light_state && ambient_light_mode_enabled_ &&
+        brightness_sensor_.isBright()) {
       if (occupancy_state)
         led_.setBackground(RgbLed::Color::Cyan);
       else
