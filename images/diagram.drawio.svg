@@ -1,319 +1,6 @@
-<svg host="65bd71144e" xmlns="http://www.w3.org/2000/svg" style="background: transparent; background-color: transparent;" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="401px" height="772px" viewBox="-0.5 -0.5 401 772" content="&lt;mxfile&gt;&lt;diagram id=&quot;_zbevJiz2QG4Wu7zapKn&quot; name=&quot;状態遷移図&quot;&gt;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&lt;/diagram&gt;&lt;/mxfile&gt;">
+<svg host="65bd71144e" xmlns="http://www.w3.org/2000/svg" style="background: transparent; background-color: transparent;" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="401px" height="511px" viewBox="-0.5 -0.5 401 511" content="&lt;mxfile&gt;&lt;diagram id=&quot;_zbevJiz2QG4Wu7zapKn&quot; name=&quot;状態遷移図&quot;&gt;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&lt;/diagram&gt;&lt;/mxfile&gt;">
     <defs/>
     <g>
-        <g>
-            <rect x="0" y="520" width="400" height="250" fill="#ffffff" stroke="#000000" pointer-events="all" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212)); stroke: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));"/>
-        </g>
-        <g>
-            <g transform="translate(-0.5 -0.5)">
-                <switch>
-                    <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe flex-start; justify-content: unsafe center; width: 398px; height: 1px; padding-top: 527px; margin-left: 1px;">
-                            <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #000000; ">
-                                <div style="display: inline-block; font-size: 12px; font-family: &quot;Helvetica&quot;; color: light-dark(#000000, #ffffff); line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
-                                    人感センサ照明（まとめ）
-                                </div>
-                            </div>
-                        </div>
-                    </foreignObject>
-                    <text x="200" y="539" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
-                        人感センサ照明（まとめ）
-                    </text>
-                </switch>
-            </g>
-        </g>
-        <g>
-            <rect x="20" y="550" width="140" height="200" fill="#dae8fc" stroke="#6c8ebf" pointer-events="all" style="fill: light-dark(rgb(218, 232, 252), rgb(29, 41, 59)); stroke: light-dark(rgb(108, 142, 191), rgb(92, 121, 163));"/>
-        </g>
-        <g>
-            <g transform="translate(-0.5 -0.5)">
-                <switch>
-                    <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe flex-start; justify-content: unsafe center; width: 138px; height: 1px; padding-top: 557px; margin-left: 21px;">
-                            <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #000000; ">
-                                <div style="display: inline-block; font-size: 12px; font-family: &quot;Helvetica&quot;; color: light-dark(#000000, #ffffff); line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
-                                    人感センサOFF
-                                </div>
-                            </div>
-                        </div>
-                    </foreignObject>
-                    <text x="90" y="569" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
-                        人感センサOFF
-                    </text>
-                </switch>
-            </g>
-        </g>
-        <g>
-            <rect x="240" y="550" width="140" height="200" fill="#f8cecc" stroke="#b85450" pointer-events="all" style="fill: light-dark(rgb(248, 206, 204), rgb(81, 45, 43)); stroke: light-dark(rgb(184, 84, 80), rgb(215, 129, 126));"/>
-        </g>
-        <g>
-            <g transform="translate(-0.5 -0.5)">
-                <switch>
-                    <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe flex-start; justify-content: unsafe center; width: 138px; height: 1px; padding-top: 557px; margin-left: 241px;">
-                            <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #000000; ">
-                                <div style="display: inline-block; font-size: 12px; font-family: &quot;Helvetica&quot;; color: light-dark(#000000, #ffffff); line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
-                                    人感センサON
-                                </div>
-                            </div>
-                        </div>
-                    </foreignObject>
-                    <text x="310" y="569" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
-                        人感センサON
-                    </text>
-                </switch>
-            </g>
-        </g>
-        <g>
-            <path d="M 146.37 600 L 253.63 600" fill="none" stroke="#7f00ff" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(127, 0, 255), rgb(255, 159, 255));"/>
-            <path d="M 141.12 600 L 148.12 596.5 L 146.37 600 L 148.12 603.5 Z" fill="#7f00ff" stroke="#7f00ff" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(127, 0, 255), rgb(255, 159, 255)); stroke: light-dark(rgb(127, 0, 255), rgb(255, 159, 255));"/>
-            <path d="M 258.88 600 L 251.88 603.5 L 253.63 600 L 251.88 596.5 Z" fill="#7f00ff" stroke="#7f00ff" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(127, 0, 255), rgb(255, 159, 255)); stroke: light-dark(rgb(127, 0, 255), rgb(255, 159, 255));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="199.5" y="582.79">
-                    人感スイッチ
-                </text>
-                <text x="199.5" y="595.79">
-                    ON/OFF
-                </text>
-            </g>
-        </g>
-        <g>
-            <rect x="40" y="580" width="100" height="40" fill="#f5f5f5" stroke="#666666" pointer-events="all" style="fill: light-dark(rgb(245, 245, 245), rgb(26, 26, 26)); stroke: light-dark(rgb(102, 102, 102), rgb(149, 149, 149));"/>
-        </g>
-        <g>
-            <g transform="translate(-0.5 -0.5)">
-                <switch>
-                    <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 98px; height: 1px; padding-top: 600px; margin-left: 41px;">
-                            <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #333333; ">
-                                <div style="display: inline-block; font-size: 12px; font-family: &quot;Helvetica&quot;; color: light-dark(#333333, #c1c1c1); line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
-                                    消灯
-                                </div>
-                            </div>
-                        </div>
-                    </foreignObject>
-                    <text x="90" y="604" fill="#333333" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
-                        消灯
-                    </text>
-                </switch>
-            </g>
-        </g>
-        <g>
-            <path d="M 100 700.19 L 100 626.37" fill="none" stroke="#005700" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(0, 87, 0), rgb(130, 205, 130));"/>
-            <path d="M 100 621.12 L 103.5 628.12 L 100 626.37 L 96.5 628.12 Z" fill="#005700" stroke="#005700" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(0, 87, 0), rgb(130, 205, 130)); stroke: light-dark(rgb(0, 87, 0), rgb(130, 205, 130));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="end" font-size="11px" transform="rotate(-90,92.29,635.33)" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="91.79" y="639.33">
-                    消灯@在室
-                </text>
-            </g>
-        </g>
-        <g>
-            <rect x="40" y="700.19" width="100" height="40" fill="#fff2cc" stroke="#d6b656" pointer-events="all" style="fill: light-dark(rgb(255, 242, 204), rgb(40, 29, 0)); stroke: light-dark(rgb(214, 182, 86), rgb(109, 81, 0));"/>
-        </g>
-        <g>
-            <g transform="translate(-0.5 -0.5)">
-                <switch>
-                    <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 98px; height: 1px; padding-top: 720px; margin-left: 41px;">
-                            <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #000000; ">
-                                <div style="display: inline-block; font-size: 12px; font-family: &quot;Helvetica&quot;; color: light-dark(#000000, #ffffff); line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
-                                    点灯
-                                </div>
-                            </div>
-                        </div>
-                    </foreignObject>
-                    <text x="90" y="724" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
-                        点灯
-                    </text>
-                </switch>
-            </g>
-        </g>
-        <g>
-            <path d="M 140 610 L 279.59 696.83" fill="none" stroke="#bd7000" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(189, 112, 0), rgb(193, 127, 31));"/>
-            <path d="M 284.05 699.6 L 276.26 698.87 L 279.59 696.83 L 279.96 692.93 Z" fill="#bd7000" stroke="#bd7000" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(189, 112, 0), rgb(193, 127, 31)); stroke: light-dark(rgb(189, 112, 0), rgb(193, 127, 31));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <rect fill="#ffffff" stroke="none" x="147" y="622" width="57" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
-                <text x="174.71" y="632.07">
-                    点灯@在室
-                </text>
-            </g>
-        </g>
-        <g>
-            <rect x="260" y="580" width="100" height="40" fill="#f5f5f5" stroke="#666666" pointer-events="all" style="fill: light-dark(rgb(245, 245, 245), rgb(26, 26, 26)); stroke: light-dark(rgb(102, 102, 102), rgb(149, 149, 149));"/>
-        </g>
-        <g>
-            <g transform="translate(-0.5 -0.5)">
-                <switch>
-                    <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 98px; height: 1px; padding-top: 600px; margin-left: 261px;">
-                            <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #333333; ">
-                                <div style="display: inline-block; font-size: 12px; font-family: &quot;Helvetica&quot;; color: light-dark(#333333, #c1c1c1); line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
-                                    消灯
-                                </div>
-                            </div>
-                        </div>
-                    </foreignObject>
-                    <text x="310" y="604" fill="#333333" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
-                        消灯
-                    </text>
-                </switch>
-            </g>
-        </g>
-        <g>
-            <path d="M 260 710.19 L 120.41 623.36" fill="none" stroke="#005700" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(0, 87, 0), rgb(130, 205, 130));"/>
-            <path d="M 115.95 620.59 L 123.74 621.32 L 120.41 623.36 L 120.04 627.26 Z" fill="#005700" stroke="#005700" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(0, 87, 0), rgb(130, 205, 130)); stroke: light-dark(rgb(0, 87, 0), rgb(130, 205, 130));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <rect fill="#ffffff" stroke="none" x="196" y="684" width="57" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
-                <text x="223.93" y="694.47">
-                    消灯@在室
-                </text>
-            </g>
-        </g>
-        <g>
-            <rect x="260" y="700.19" width="100" height="40" fill="#fff2cc" stroke="#d6b656" pointer-events="all" style="fill: light-dark(rgb(255, 242, 204), rgb(40, 29, 0)); stroke: light-dark(rgb(214, 182, 86), rgb(109, 81, 0));"/>
-        </g>
-        <g>
-            <g transform="translate(-0.5 -0.5)">
-                <switch>
-                    <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 98px; height: 1px; padding-top: 720px; margin-left: 261px;">
-                            <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #000000; ">
-                                <div style="display: inline-block; font-size: 12px; font-family: &quot;Helvetica&quot;; color: light-dark(#000000, #ffffff); line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
-                                    点灯
-                                </div>
-                            </div>
-                        </div>
-                    </foreignObject>
-                    <text x="310" y="724" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
-                        点灯
-                    </text>
-                </switch>
-            </g>
-        </g>
-        <g>
-            <path d="M 349 620 L 349 693.82" fill="none" stroke="#b20000" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(178, 0, 0), rgb(255, 172, 172));"/>
-            <path d="M 349 699.07 L 345.5 692.07 L 349 693.82 L 352.5 692.07 Z" fill="#b20000" stroke="#b20000" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(178, 0, 0), rgb(255, 172, 172)); stroke: light-dark(rgb(178, 0, 0), rgb(255, 172, 172));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" transform="rotate(-90,357.29,660.14)" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="356.79" y="664.14">
-                    人感検出
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 340 700.19 L 340 626.37" fill="none" stroke="#b20000" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(178, 0, 0), rgb(255, 172, 172));"/>
-            <path d="M 340 621.12 L 343.5 628.12 L 340 626.37 L 336.5 628.12 Z" fill="#b20000" stroke="#b20000" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(178, 0, 0), rgb(255, 172, 172)); stroke: light-dark(rgb(178, 0, 0), rgb(255, 172, 172));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" transform="rotate(-90,331.29,659.62)" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="330.79" y="663.62">
-                    人感非検出
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 56.76 620.64 L 59.88 626.82 Q 63 633 65.33 629.21 L 67.66 625.42" fill="none" stroke="#b20000" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(178, 0, 0), rgb(255, 172, 172));"/>
-            <path d="M 70.41 620.95 L 69.73 628.75 L 67.66 625.42 L 63.76 625.08 Z" fill="#b20000" stroke="#b20000" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(178, 0, 0), rgb(255, 172, 172)); stroke: light-dark(rgb(178, 0, 0), rgb(255, 172, 172));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(237, 237, 237));">
-                <text x="50.26" y="643.52">
-                    人感検出
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 56 699.55 L 59.12 693.37 Q 62.24 687.19 64.57 690.98 L 66.9 694.77" fill="none" stroke="#b20000" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(178, 0, 0), rgb(255, 172, 172));"/>
-            <path d="M 69.65 699.24 L 63 695.11 L 66.9 694.77 L 68.97 691.44 Z" fill="#b20000" stroke="#b20000" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(178, 0, 0), rgb(255, 172, 172)); stroke: light-dark(rgb(178, 0, 0), rgb(255, 172, 172));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="49.4" y="684.24">
-                    人感非検出
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 146.37 720.19 L 253.63 720.19" fill="none" stroke="#7f00ff" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(127, 0, 255), rgb(255, 159, 255));"/>
-            <path d="M 141.12 720.19 L 148.12 716.69 L 146.37 720.19 L 148.12 723.69 Z" fill="#7f00ff" stroke="#7f00ff" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(127, 0, 255), rgb(255, 159, 255)); stroke: light-dark(rgb(127, 0, 255), rgb(255, 159, 255));"/>
-            <path d="M 258.88 720.19 L 251.88 723.69 L 253.63 720.19 L 251.88 716.69 Z" fill="#7f00ff" stroke="#7f00ff" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(127, 0, 255), rgb(255, 159, 255)); stroke: light-dark(rgb(127, 0, 255), rgb(255, 159, 255));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="199.5" y="733.98">
-                    人感スイッチ
-                </text>
-                <text x="199.5" y="746.98">
-                    ON/OFF
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 109 620 L 109 693.82" fill="none" stroke="#bd7000" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(189, 112, 0), rgb(193, 127, 31));"/>
-            <path d="M 109 699.07 L 105.5 692.07 L 109 693.82 L 112.5 692.07 Z" fill="#bd7000" stroke="#bd7000" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(189, 112, 0), rgb(193, 127, 31)); stroke: light-dark(rgb(189, 112, 0), rgb(193, 127, 31));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" font-size="11px" transform="rotate(-90,117.29,689.43)" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="116.79" y="693.43">
-                    点灯@不在
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 260 610 L 120.41 696.83" fill="none" stroke="#bd7000" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(189, 112, 0), rgb(193, 127, 31));"/>
-            <path d="M 115.95 699.6 L 120.04 692.93 L 120.41 696.83 L 123.74 698.87 Z" fill="#bd7000" stroke="#bd7000" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(189, 112, 0), rgb(193, 127, 31)); stroke: light-dark(rgb(189, 112, 0), rgb(193, 127, 31));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <rect fill="#ffffff" stroke="none" x="197" y="609" width="57" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
-                <text x="224.58" y="618.58">
-                    点灯@不在
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 140 710.19 L 279.59 623.36" fill="none" stroke="#005700" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(0, 87, 0), rgb(130, 205, 130));"/>
-            <path d="M 284.05 620.59 L 279.96 627.26 L 279.59 623.36 L 276.26 621.32 Z" fill="#005700" stroke="#005700" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(0, 87, 0), rgb(130, 205, 130)); stroke: light-dark(rgb(0, 87, 0), rgb(130, 205, 130));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <rect fill="#ffffff" stroke="none" x="143" y="698" width="57" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
-                <text x="170.7" y="708.17">
-                    消灯@不在
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 295 700.19 L 295 626.37" fill="none" stroke="#005700" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(0, 87, 0), rgb(130, 205, 130));"/>
-            <path d="M 295 621.12 L 298.5 628.12 L 295 626.37 L 291.5 628.12 Z" fill="#005700" stroke="#005700" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(0, 87, 0), rgb(130, 205, 130)); stroke: light-dark(rgb(0, 87, 0), rgb(130, 205, 130));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="end" font-size="11px" transform="rotate(-90,288.29,635.33)" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="287.79" y="639.33">
-                    消灯@不在
-                </text>
-            </g>
-        </g>
-        <g>
-            <path d="M 304 620 L 304 693.82" fill="none" stroke="#bd7000" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(189, 112, 0), rgb(193, 127, 31));"/>
-            <path d="M 304 699.07 L 300.5 692.07 L 304 693.82 L 307.5 692.07 Z" fill="#bd7000" stroke="#bd7000" stroke-miterlimit="10" pointer-events="all" style="fill: light-dark(rgb(189, 112, 0), rgb(193, 127, 31)); stroke: light-dark(rgb(189, 112, 0), rgb(193, 127, 31));"/>
-        </g>
-        <g>
-            <g fill="#000000" font-family="&quot;Helvetica&quot;" font-size="11px" transform="rotate(-90,312.29,689.43)" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="311.79" y="693.43">
-                    点灯@在室
-                </text>
-            </g>
-        </g>
         <g>
             <rect x="0" y="0" width="400" height="250" fill="#ffffff" stroke="#000000" pointer-events="all" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212)); stroke: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));"/>
         </g>
@@ -384,10 +71,10 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="199.5" y="62.79">
+                <text x="200" y="63">
                     人感スイッチ
                 </text>
-                <text x="199.5" y="75.79">
+                <text x="200" y="76">
                     ON/OFF
                 </text>
             </g>
@@ -419,7 +106,7 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="end" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="114.07" y="164.19">
+                <text x="114.5" y="164.69">
                     消灯
                 </text>
             </g>
@@ -452,7 +139,7 @@
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
                 <rect fill="#ffffff" stroke="none" x="162" y="89" width="24" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
-                <text x="172.71" y="99.07">
+                <text x="173.04" y="99.36">
                     点灯
                 </text>
             </g>
@@ -484,8 +171,8 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <rect fill="#ffffff" stroke="none" x="209" y="174" width="24" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
-                <text x="219.93" y="184.47">
+                <rect fill="#ffffff" stroke="none" x="209" y="175" width="24" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
+                <text x="219.9" y="184.53">
                     消灯
                 </text>
             </g>
@@ -519,7 +206,7 @@
             <g transform="translate(-0.5 -0.5)">
                 <switch>
                     <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 150px; margin-left: 351px;">
+                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 151px; margin-left: 352px;">
                             <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #000000; ">
                                 <div style="display: inline-block; font-size: 11px; font-family: &quot;Helvetica&quot;; color: light-dark(#000000, #ffffff); line-height: 1.2; pointer-events: all; white-space: nowrap; ">
                                     一定時間
@@ -529,7 +216,7 @@
                             </div>
                         </div>
                     </foreignObject>
-                    <text x="351" y="153" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="11px" text-anchor="middle">
+                    <text x="352" y="154" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="11px" text-anchor="middle">
                         一定時間
 人感非検出
                     </text>
@@ -542,7 +229,7 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="49.4" y="164.24">
+                <text x="49.61" y="164.46">
                     人感非検出
                 </text>
             </g>
@@ -569,7 +256,7 @@
             </g>
         </g>
         <g>
-            <path d="M 211.48 68.05 L 232.53 68.05 L 232.53 127 L 221.48 127 L 216.32 137 L 215.48 127 L 211.48 127 Z" fill="#ffff88" stroke="#36393d" stroke-miterlimit="10" transform="rotate(90,222.01,102.52)" pointer-events="all" style="fill: light-dark(rgb(255, 255, 136), rgb(33, 33, 0)); stroke: light-dark(rgb(54, 57, 61), rgb(186, 189, 192));"/>
+            <path d="M 211.48 68.05 L 232.53 68.05 L 232.53 127 L 221.48 127 L 216.32 137 L 215.48 127 L 211.48 127 Z" fill="#ffff88" stroke="#36393d" stroke-miterlimit="10" transform="rotate(90,222,102.52)" pointer-events="all" style="fill: light-dark(rgb(255, 255, 136), rgb(33, 33, 0)); stroke: light-dark(rgb(54, 57, 61), rgb(186, 189, 192));"/>
         </g>
         <g>
             <path d="M 146.37 200.19 L 253.63 200.19" fill="none" stroke="#7f00ff" stroke-miterlimit="10" pointer-events="stroke" style="stroke: light-dark(rgb(127, 0, 255), rgb(255, 159, 255));"/>
@@ -578,10 +265,10 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="199.5" y="213.98">
+                <text x="200" y="214.19">
                     人感スイッチ
                 </text>
-                <text x="199.5" y="226.98">
+                <text x="200" y="227.19">
                     ON/OFF
                 </text>
             </g>
@@ -591,7 +278,7 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="12px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="367.5" y="126.36">
+                <text x="367.5" y="126.5">
                     自動消灯
                 </text>
             </g>
@@ -602,7 +289,7 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="291.5" y="117.71">
+                <text x="291.5" y="117.5">
                     点灯
                 </text>
             </g>
@@ -622,7 +309,7 @@
                             </div>
                         </div>
                     </foreignObject>
-                    <text x="211" y="152" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
+                    <text x="211" y="153" fill="light-dark(#000000, #ffffff)" font-family="&quot;Helvetica&quot;" font-size="12px" text-anchor="middle">
                         点灯時に在室なら人感ON
                     </text>
                 </switch>
@@ -711,10 +398,10 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="199.5" y="322.79">
+                <text x="200" y="323">
                     人感スイッチ
                 </text>
-                <text x="199.5" y="335.79">
+                <text x="200" y="336">
                     ON/OFF
                 </text>
             </g>
@@ -746,7 +433,7 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="end" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="286.07" y="434.19">
+                <text x="286.5" y="434.69">
                     消灯
                 </text>
             </g>
@@ -779,7 +466,7 @@
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
                 <rect fill="#ffffff" stroke="none" x="216" y="350" width="24" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
-                <text x="226.58" y="359.58">
+                <text x="226.67" y="359.87">
                     点灯
                 </text>
             </g>
@@ -812,7 +499,7 @@
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
                 <rect fill="#ffffff" stroke="none" x="167" y="435" width="24" height="14" stroke-width="0" style="fill: light-dark(#ffffff, var(--ge-dark-color, #121212));"/>
-                <text x="177.7" y="445.17">
+                <text x="178.16" y="445.23">
                     消灯
                 </text>
             </g>
@@ -844,16 +531,16 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="339.79" y="396.21">
+                <text x="340" y="396">
                     人感検出
                 </text>
-                <text x="339.79" y="409.21">
+                <text x="340" y="409">
                     (照度センサON
                 </text>
-                <text x="339.79" y="422.21">
+                <text x="340" y="422">
                     かつ明るい
                 </text>
-                <text x="339.79" y="435.21">
+                <text x="340" y="435">
                     場合は無効)
                 </text>
             </g>
@@ -864,7 +551,7 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(237, 237, 237));">
-                <text x="50.26" y="383.52">
+                <text x="50.47" y="383.73">
                     人感検出
                 </text>
             </g>
@@ -918,10 +605,10 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="199.5" y="473.98">
+                <text x="200" y="474.19">
                     人感スイッチ
                 </text>
-                <text x="199.5" y="486.98">
+                <text x="200" y="487.19">
                     ON/OFF
                 </text>
             </g>
@@ -932,7 +619,7 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" font-size="11px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="92.5" y="377.71">
+                <text x="92.5" y="377.5">
                     点灯
                 </text>
             </g>
@@ -976,7 +663,7 @@
         </g>
         <g>
             <g fill="#000000" font-family="&quot;Helvetica&quot;" text-anchor="middle" font-size="12px" style="fill: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));">
-                <text x="367.5" y="375.86">
+                <text x="367.5" y="376">
                     自動点灯
                 </text>
             </g>
@@ -992,7 +679,7 @@
             </g>
         </g>
         <g>
-            <path d="M 168.48 324.52 L 189.53 324.52 L 189.53 381.47 L 178.9 381.47 L 179.85 393.47 L 172.9 381.47 L 168.48 381.47 Z" fill="#ffff88" stroke="#36393d" stroke-miterlimit="10" transform="rotate(-90,179.01,358.99)" pointer-events="all" style="fill: light-dark(rgb(255, 255, 136), rgb(33, 33, 0)); stroke: light-dark(rgb(54, 57, 61), rgb(186, 189, 192));"/>
+            <path d="M 168.48 324.52 L 189.53 324.52 L 189.53 381.47 L 178.9 381.47 L 179.85 393.47 L 172.9 381.47 L 168.48 381.47 Z" fill="#ffff88" stroke="#36393d" stroke-miterlimit="10" transform="rotate(-90,179,358.99)" pointer-events="all" style="fill: light-dark(rgb(255, 255, 136), rgb(33, 33, 0)); stroke: light-dark(rgb(54, 57, 61), rgb(186, 189, 192));"/>
         </g>
         <g>
             <rect x="138" y="343.99" width="70" height="30" fill="none" stroke="none" pointer-events="all"/>
@@ -1002,27 +689,6 @@
                 <text x="172.5" y="363.49">
                     手動操作
                 </text>
-            </g>
-        </g>
-        <g>
-            <rect x="310" y="751" width="90" height="20" fill="none" stroke="none" pointer-events="all"/>
-        </g>
-        <g>
-            <g transform="translate(-0.5 -0.5)">
-                <switch>
-                    <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
-                        <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 1px; height: 1px; padding-top: 761px; margin-left: 355px;">
-                            <div style="box-sizing: border-box; font-size: 0; text-align: center; color: #1A1A1A; ">
-                                <div style="display: inline-block; font-size: 9px; font-family: &quot;Helvetica&quot;; color: light-dark(#1A1A1A, #d7d7d7); line-height: 1.2; pointer-events: all; white-space: nowrap; ">
-                                    ©2025 KERI's Lab
-                                </div>
-                            </div>
-                        </div>
-                    </foreignObject>
-                    <text x="355" y="764" fill="#1A1A1A" font-family="&quot;Helvetica&quot;" font-size="9px" text-anchor="middle">
-                        ©2025 KERI's Lab
-                    </text>
-                </switch>
             </g>
         </g>
         <g>

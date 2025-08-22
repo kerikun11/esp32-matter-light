@@ -1,37 +1,27 @@
-# ESP32 Matter Smart Light Controller
+# ESP32 Matter Smart Light Controller - KERI's Lab
 
-Matterスマートホーム対応、人感センサ付き照明コントローラ（赤外線学習リモコン）。
+ESP32で作るMatterスマートホーム対応の人感センサ付き照明コントローラ。
 
-![実機](images/esp32-matter-light-perspective-1.jpg)
-
-- 対応マイコン一覧
-  - ESP32-C6
-    - Seeed Studio XIAO ESP32C6
-  - ESP32-S3
-    - Seeed Studio XIAO ESP32S3
-- 開発環境
-  - [ESP-IDF](https://github.com/espressif/esp-idf) v5.4.2
-  - [ESP-Matter](https://github.com/espressif/esp-matter) v1.4
-  - [ESP32-Arduino](https://github.com/espressif/arduino-esp32) v3.2.1
+<img alt="人感センサライト" src="images/esp32-matter-light-standing.jpg" style="max-width:240px">
 
 ## 機能
 
 - 赤外線学習リモコン
-  - 任意の照明リモコンON/OFFボタンの赤外線データを録画して再生。
-  - 赤外線データは内蔵フラッシュメモリ (ESP32 Preferences) に保存。
+  - 照明のリモコンの赤外線データを録画して再生することで、照明のON/OFFを制御。
 - 人感センサ
-  - 焦電型人感センサで人を検出して、照明の自動ON/OFFを制御。
+  - 焦電型人感センサが人を検知すると自動的に照明をON、一定時間不検出だと照明をOFFに制御。
 - 照度センサ
   - 日中の明るい環境では照度センサにより自動照明ONを無効化するオプションを用意。
-- RGB LED
-  - LEDの色で動作状態をお知らせ。
 - Matter Endpoint
   - スマートホームの規格Matterに対応。
-  - WiFi経由でGoogleHomeアプリやAmazon Alexaアプリから操作可能。
+  - WiFi経由でGoogleHomeアプリやAmazonAlexaアプリなどから照明ON/OFFと人感センサON/OFFを操作可能。
+- RGB LED
+  - LEDの色で動作状態をお知らせ。
 - 物理ボタン
   - 基板上のボタンを押して直接照明をON/OFF。
-- 赤外線リモコン連携
-  - リモコンの信号を受光してON/OFF状態を同期。
+- リモコン連携
+  - リモコンの信号を受光して照明のON/OFF状態を同期。
+  - リモコンのボタンを複数回押して人感センサON/OFFを操作。
 
 ---
 
@@ -44,7 +34,8 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
      - QRコード: https://project-chip.github.io/connectedhomeip/qrcode.html?data=MT:Y.K9042C00KA0648G00
      - ペアリングコード: 34970112332
    - Alexaアプリはなぜか2つ以上のデバイスがうまく追加できなかったので、GoogleHomeアプリ推奨。GoogleHomeでデバイスを追加してからAlexaにデバイスを共有すればAlexaにも設定できる。
-   - Matterには下記3つのデバイスが追加されるので、部屋の登録と名前変更を行う。
+   - Matterの製品登録していないので、認証されていないデバイスと警告が出るが続行する。
+   - Matterには下記3つのデバイスが追加されるので、適当にの名前変更と部屋登録を行う。
      1. `照明デバイス`: 照明のON/OFFスイッチ。「リビングのライト」などの名前にしておくとよい。
      2. `プラグデバイス`: 人感センサのON/OFFスイッチ。プラグの種類は一般のプラグに設定しておく。また、人感センサという名前にすると「アレクサ、人感センサをオンにして」と操作できる。
      3. `端末デバイス`: 自動的に追加されるが特に使用しない。
@@ -96,7 +87,7 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 |    消     |      OFF       | 人感センサ無効状態（人感スイッチがOFF）      |
 |    黄     |      OFF       | 明るいため人感センサ無効の状態（人感非検出） |
 |   青緑    |      OFF       | 明るいため人感センサ無効の状態（人感検出中） |
-|    桃     |       -        | Matter Device Commissioning 状態             |
+|    桃     |       -        | Matter 接続待機 (Commissioning) 状態         |
 |    赤     |       -        | ネットワークエラー                           |
 | 緑 (点滅) |       -        | 赤外線の送受信                               |
 
@@ -104,13 +95,26 @@ Matterスマートホーム対応、人感センサ付き照明コントロー�
 
 ## 作り方
 
+### 環境
+
+- 対応マイコン一覧
+  - ESP32-C6
+    - Seeed Studio XIAO ESP32C6
+  - ESP32-S3
+    - Seeed Studio XIAO ESP32S3
+- 開発環境
+  - [ESP-IDF](https://github.com/espressif/esp-idf) v5.4.2
+  - [ESP-Matter](https://github.com/espressif/esp-matter) v1.4
+  - [ESP32-Arduino](https://github.com/espressif/arduino-esp32) v3.2.1
+
 ### 実機
 
 とりあえずミニブレッドボードで製作。
 
-![実機](images/esp32-matter-light-top.jpg)
-![実機](images/esp32-matter-light-perspective-1.jpg)
-![実機](images/esp32-matter-light-perspective-2.jpg)
+<img alt="実機" src="images/esp32-matter-light-standing.jpg" style="max-width:240px">
+<img alt="実機" src="images/esp32-matter-light-top.jpg" style="max-width:240px">
+<img alt="実機" src="images/esp32-matter-light-perspective-1.jpg" style="max-width:240px">
+<img alt="実機" src="images/esp32-matter-light-perspective-2.jpg" style="max-width:240px">
 
 ### 回路
 
