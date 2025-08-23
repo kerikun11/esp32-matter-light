@@ -3,77 +3,56 @@
  * @copyright 2025 Ryotaro Onuki
  */
 
-#if 1
-#include "smart_light_controller.h"
-
-SmartLightController app_;
-
-void setup() {
-  Serial.begin(CONFIG_MONITOR_BAUD);
-  app_.begin();
-
-  /*set log level*/
-  esp_log_level_set("esp_matter_attribute", ESP_LOG_WARN);
-  esp_log_level_set("esp_matter_command", ESP_LOG_WARN);
-  esp_log_level_set("ROUTE_HOOK", ESP_LOG_WARN);
-}
-
-void loop() {
-  app_.handle();
-  yield();
-}
-
-#else  // Matter Light Example
-
 #include <Arduino.h>
 
-#include "app_config.h"
 #include "app_log.h"
-#include "matter_light.h"
+#include "app_matter.h"
 #include "rgb_led.h"
+#include "servo_motor.h"
 
-MatterLight matter_light_;
+#define CONFIG_APP_PIN_RGB_LED PIN_RGB_LED  //< 8 (defined in pins_arduino.h)
+#define CONFIG_APP_PIN_SERVO 20
+
+Matter matter_;
 RgbLed led_(CONFIG_APP_PIN_RGB_LED);
+ServoMotor servo_;
 
 void setup() {
   Serial.begin(CONFIG_MONITOR_BAUD);
-  matter_light_.begin(true, true);
-  matter_light_.printOnboarding();
+
+  matter_.begin();
+  matter_.printOnboarding();
+
+  servo_.begin(CONFIG_APP_PIN_SERVO);
 }
 
 void loop() {
   /* status */
-  if (!matter_light_.isCommissioned()) {
+  if (!matter_.isCommissioned()) {
     led_.setBackground(RgbLed::Color::Magenta);
-  } else if (!matter_light_.isConnected()) {
+  } else if (!matter_.isConnected()) {
     led_.setBackground(RgbLed::Color::Red);
   } else {
     led_.setBackground(RgbLed::Color::White);
   }
 
   /* event */
-  MatterLight::Event event;
-  if (matter_light_.getEvent(event, 0)) {
+  Matter::Event event;
+  if (matter_.getEvent(event, 0)) {
     led_.blinkOnce(RgbLed::Color::Blue);
     switch (event.type) {
-      case MatterLight::EventType::LightOn:
-        LOGI("[Event] Light ON");
-        break;
-      case MatterLight::EventType::LightOff:
-        LOGI("[Event] Light OFF");
-        break;
-      case MatterLight::EventType::SwitchOn:
+      case Matter::EventType::SwitchOn:
         LOGI("[Event] Switch ON");
+        servo_.setTargetDegree(180, 90);
         break;
-      case MatterLight::EventType::SwitchOff:
+      case Matter::EventType::SwitchOff:
         LOGI("[Event] Switch OFF");
+        servo_.setTargetDegree(0, 90);
         break;
     }
-    LOGW("[Event] Light %s, Switch %s", event.light_state ? "ON" : "OFF",
-         event.switch_state ? "ON" : "OFF");
   }
 
+  servo_.handle();
   led_.update();
   yield();
 }
-#endif

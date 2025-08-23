@@ -21,11 +21,9 @@
 #include <lib/core/TLV.h>
 #include <platform/ConfigurationManager.h>
 
-class MatterLight {
+class Matter {
  public:
   enum class EventType : uint8_t {
-    LightOn,
-    LightOff,
     SwitchOn,
     SwitchOff,
   };
@@ -33,7 +31,6 @@ class MatterLight {
   struct Event {
     uint64_t timestamp_ms;
     EventType type;
-    bool light_state;
     bool switch_state;
   };
 
@@ -42,7 +39,7 @@ class MatterLight {
       "https://project-chip.github.io/connectedhomeip/"
       "qrcode.html?data=MT:Y.K9042C00KA0648G00";
 
-  bool begin(bool initial_light_on, bool initial_switch_on) {
+  bool begin(bool initial_switch_on = false) {
     esp_matter::node::config_t node_cfg{};
     node_ = esp_matter::node::create(&node_cfg, nullptr, nullptr, this);
     if (!node_) {
@@ -50,25 +47,12 @@ class MatterLight {
       return false;
     }
 
-    // Light endpoint
-    {
-      esp_matter::endpoint::on_off_light::config_t cfg{};
-      cfg.on_off.on_off = initial_light_on;
-      ep_light_ =
-          esp_matter::endpoint::on_off_light::create(node_, &cfg, 0, this);
-      if (!ep_light_ || !registerOnOffCbs_(ep_light_) ||
-          !setOnOffAttr_(ep_light_, initial_light_on)) {
-        ESP_LOGE(TAG, "light::create failed");
-        return false;
-      }
-    }
-
-    // Plugin endpoint (switch)
+    // Switch endpoint (plugin unit)
     {
       esp_matter::endpoint::on_off_plugin_unit::config_t cfg{};
       cfg.on_off.on_off = initial_switch_on;
-      ep_plugin_ = esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg,
-                                                                    0, this);
+      ep_plugin_ =
+          esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg, 0, this);
       if (!ep_plugin_ || !registerOnOffCbs_(ep_plugin_) ||
           !setOnOffAttr_(ep_plugin_, initial_switch_on)) {
         ESP_LOGE(TAG, "plugin::create failed");
@@ -92,9 +76,7 @@ class MatterLight {
       return false;
     }
 
-    ESP_LOGI(TAG, "light_ep=0x%04x(%s) plugin_ep=0x%04x(%s)",
-             esp_matter::endpoint::get_id(ep_light_),
-             initial_light_on ? "ON" : "OFF",
+    ESP_LOGI(TAG, "plugin_ep=0x%04x(%s)",
              esp_matter::endpoint::get_id(ep_plugin_),
              initial_switch_on ? "ON" : "OFF");
     printOnboarding();
@@ -119,7 +101,6 @@ class MatterLight {
            !srv.GetCommissioningWindowManager().IsCommissioningWindowOpen();
   }
 
-  bool setLightState(bool on) { return setOnOffAttr_(ep_light_, on); }
   bool setSwitchState(bool on) { return setOnOffAttr_(ep_plugin_, on); }
 
   void decommission() {
@@ -129,12 +110,11 @@ class MatterLight {
   }
 
  private:
-  static constexpr const char *TAG = "MatterLight";
+  static constexpr const char *TAG = "Matter";
   static constexpr size_t kQueueSize = 8;
   static constexpr size_t kMaxInstances = 8;
 
   esp_matter::node_t *node_ = nullptr;
-  esp_matter::endpoint_t *ep_light_ = nullptr;
   esp_matter::endpoint_t *ep_plugin_ = nullptr;
   QueueHandle_t queue_ = nullptr;
 
@@ -145,9 +125,9 @@ class MatterLight {
     auto *c_off = esp_matter::cluster::on_off::command::create_off(onoff);
     auto *c_toggle = esp_matter::cluster::on_off::command::create_toggle(onoff);
     if (!c_on || !c_off || !c_toggle) return false;
-    esp_matter::command::set_user_callback(c_on, &MatterLight::cmdCb_);
-    esp_matter::command::set_user_callback(c_off, &MatterLight::cmdCb_);
-    esp_matter::command::set_user_callback(c_toggle, &MatterLight::cmdCb_);
+    esp_matter::command::set_user_callback(c_on, &Matter::cmdCb_);
+    esp_matter::command::set_user_callback(c_off, &Matter::cmdCb_);
+    esp_matter::command::set_user_callback(c_toggle, &Matter::cmdCb_);
     return true;
   }
 
@@ -180,26 +160,16 @@ class MatterLight {
 
   static esp_err_t cmdCb_(const chip::app::ConcreteCommandPath &path,
                           chip::TLV::TLVReader &, void *) {
-    MatterLight *self = findOwnerByEndpoint_(path.mEndpointId);
+    Matter *self = findOwnerByEndpoint_(path.mEndpointId);
     if (!self || path.mClusterId != chip::app::Clusters::OnOff::Id)
       return ESP_OK;
 
-    const uint16_t ep_light = esp_matter::endpoint::get_id(self->ep_light_);
     const uint16_t ep_plugin = esp_matter::endpoint::get_id(self->ep_plugin_);
 
-    bool light_now = false, switch_now = false;
-    (void)self->readOnAttr_(self->ep_light_, light_now);
+    bool switch_now = false;
     (void)self->readOnAttr_(self->ep_plugin_, switch_now);
 
-    if (path.mEndpointId == ep_light) {
-      if (path.mCommandId == chip::app::Clusters::OnOff::Commands::On::Id)
-        light_now = true;
-      else if (path.mCommandId == chip::app::Clusters::OnOff::Commands::Off::Id)
-        light_now = false;
-      else if (path.mCommandId ==
-               chip::app::Clusters::OnOff::Commands::Toggle::Id)
-        light_now = !light_now;
-    } else if (path.mEndpointId == ep_plugin) {
+    if (path.mEndpointId == ep_plugin) {
       if (path.mCommandId == chip::app::Clusters::OnOff::Commands::On::Id)
         switch_now = true;
       else if (path.mCommandId == chip::app::Clusters::OnOff::Commands::Off::Id)
@@ -213,10 +183,7 @@ class MatterLight {
 
     Event ev{};
     ev.timestamp_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
-    ev.type = (path.mEndpointId == ep_light)
-                  ? (light_now ? EventType::LightOn : EventType::LightOff)
-                  : (switch_now ? EventType::SwitchOn : EventType::SwitchOff);
-    ev.light_state = light_now;
+    ev.type = switch_now ? EventType::SwitchOn : EventType::SwitchOff;
     ev.switch_state = switch_now;
 
     if (self->queue_) {
@@ -226,11 +193,11 @@ class MatterLight {
     return ESP_OK;
   }
 
-  static MatterLight *&inst_(size_t i) {
-    static MatterLight *s[kMaxInstances]{};
+  static Matter *&inst_(size_t i) {
+    static Matter *s[kMaxInstances]{};
     return s[i];
   }
-  static bool registerInstance_(MatterLight *self) {
+  static bool registerInstance_(Matter *self) {
     for (size_t i = 0; i < kMaxInstances; ++i)
       if (!inst_(i)) {
         inst_(i) = self;
@@ -238,12 +205,10 @@ class MatterLight {
       }
     return false;
   }
-  static MatterLight *findOwnerByEndpoint_(uint16_t ep) {
+  static Matter *findOwnerByEndpoint_(uint16_t ep) {
     for (size_t i = 0; i < kMaxInstances; ++i) {
-      MatterLight *p = inst_(i);
+      Matter *p = inst_(i);
       if (!p) continue;
-      if (p->ep_light_ && esp_matter::endpoint::get_id(p->ep_light_) == ep)
-        return p;
       if (p->ep_plugin_ && esp_matter::endpoint::get_id(p->ep_plugin_) == ep)
         return p;
     }
