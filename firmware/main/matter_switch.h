@@ -21,7 +21,7 @@
 #include <lib/core/TLV.h>
 #include <platform/ConfigurationManager.h>
 
-class Matter {
+class MatterSwitch {
  public:
   enum class EventType : uint8_t {
     SwitchOn,
@@ -51,8 +51,8 @@ class Matter {
     {
       esp_matter::endpoint::on_off_plugin_unit::config_t cfg{};
       cfg.on_off.on_off = initial_switch_on;
-      ep_plugin_ =
-          esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg, 0, this);
+      ep_plugin_ = esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg,
+                                                                    0, this);
       if (!ep_plugin_ || !registerOnOffCbs_(ep_plugin_) ||
           !setOnOffAttr_(ep_plugin_, initial_switch_on)) {
         ESP_LOGE(TAG, "plugin::create failed");
@@ -110,7 +110,7 @@ class Matter {
   }
 
  private:
-  static constexpr const char *TAG = "Matter";
+  static constexpr const char *TAG = "MatterSwitch";
   static constexpr size_t kQueueSize = 8;
   static constexpr size_t kMaxInstances = 8;
 
@@ -125,9 +125,9 @@ class Matter {
     auto *c_off = esp_matter::cluster::on_off::command::create_off(onoff);
     auto *c_toggle = esp_matter::cluster::on_off::command::create_toggle(onoff);
     if (!c_on || !c_off || !c_toggle) return false;
-    esp_matter::command::set_user_callback(c_on, &Matter::cmdCb_);
-    esp_matter::command::set_user_callback(c_off, &Matter::cmdCb_);
-    esp_matter::command::set_user_callback(c_toggle, &Matter::cmdCb_);
+    esp_matter::command::set_user_callback(c_on, &MatterSwitch::cmdCb_);
+    esp_matter::command::set_user_callback(c_off, &MatterSwitch::cmdCb_);
+    esp_matter::command::set_user_callback(c_toggle, &MatterSwitch::cmdCb_);
     return true;
   }
 
@@ -160,7 +160,7 @@ class Matter {
 
   static esp_err_t cmdCb_(const chip::app::ConcreteCommandPath &path,
                           chip::TLV::TLVReader &, void *) {
-    Matter *self = findOwnerByEndpoint_(path.mEndpointId);
+    MatterSwitch *self = findOwnerByEndpoint_(path.mEndpointId);
     if (!self || path.mClusterId != chip::app::Clusters::OnOff::Id)
       return ESP_OK;
 
@@ -193,11 +193,11 @@ class Matter {
     return ESP_OK;
   }
 
-  static Matter *&inst_(size_t i) {
-    static Matter *s[kMaxInstances]{};
+  static MatterSwitch *&inst_(size_t i) {
+    static MatterSwitch *s[kMaxInstances]{};
     return s[i];
   }
-  static bool registerInstance_(Matter *self) {
+  static bool registerInstance_(MatterSwitch *self) {
     for (size_t i = 0; i < kMaxInstances; ++i)
       if (!inst_(i)) {
         inst_(i) = self;
@@ -205,9 +205,9 @@ class Matter {
       }
     return false;
   }
-  static Matter *findOwnerByEndpoint_(uint16_t ep) {
+  static MatterSwitch *findOwnerByEndpoint_(uint16_t ep) {
     for (size_t i = 0; i < kMaxInstances; ++i) {
-      Matter *p = inst_(i);
+      MatterSwitch *p = inst_(i);
       if (!p) continue;
       if (p->ep_plugin_ && esp_matter::endpoint::get_id(p->ep_plugin_) == ep)
         return p;
