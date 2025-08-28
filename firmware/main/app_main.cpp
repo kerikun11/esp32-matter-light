@@ -39,7 +39,6 @@ void setup() {
   Serial.begin(CONFIG_MONITOR_BAUD);
 
   matter_.begin();
-  matter_.printOnboarding();
 
   ota_begin();
   servo_.begin(CONFIG_APP_PIN_SERVO_CTRL, CONFIG_APP_PIN_SERVO_POWER);
