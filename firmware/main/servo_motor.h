@@ -125,7 +125,7 @@ class ServoMotor {
 
  private:
   // 定数
-  static constexpr uint16_t kMinUs = 500, kMaxUs = 2400;
+  static constexpr uint16_t kMinUs = 500, kMaxUs = 2400 + 100;  // 角度調整
   static constexpr uint32_t kFreqHz = 50;
   static constexpr uint8_t kResBits = 16;
   static constexpr uint32_t kHoldMs = 100;          // 開始/終了の保持時間
