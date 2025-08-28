@@ -3,6 +3,7 @@
  * @copyright 2025 Ryotaro Onuki
  */
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 
 #include "app_log.h"
 #include "matter_switch.h"
@@ -17,12 +18,30 @@ MatterSwitch matter_;
 RgbLed led_(CONFIG_APP_PIN_RGB_LED);
 ServoMotor servo_;
 
+static void ota_begin() {
+  ArduinoOTA.setMdnsEnabled(false);  // to avoid Matter mDNS conflict
+  ArduinoOTA.onStart([]() {
+    auto cmd = ArduinoOTA.getCommand();
+    LOGI("[OTA] Start updating %s",
+         cmd == U_FLASH ? "sketch"
+                        : (cmd == U_SPIFFS ? "filesystem" : "unknown"));
+  });
+  ArduinoOTA.onEnd([]() { LOGI("[OTA] End"); });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    LOGI("[OTA] Progress: %u%% (%d/%d)", 100 * progress / total, progress,
+         total);
+  });
+  ArduinoOTA.onError([](ota_error_t error) { LOGI("[OTA] Error: %d", error); });
+  ArduinoOTA.begin();
+}
+
 void setup() {
   Serial.begin(CONFIG_MONITOR_BAUD);
 
   matter_.begin();
   matter_.printOnboarding();
 
+  ota_begin();
   servo_.begin(CONFIG_APP_PIN_SERVO_CTRL, CONFIG_APP_PIN_SERVO_POWER);
 }
 
@@ -54,5 +73,6 @@ void loop() {
 
   servo_.handle();
   led_.update();
+  ArduinoOTA.handle();
   yield();
 }
