@@ -103,9 +103,9 @@ ESP32で作るMatterスマートホーム対応の人感センサ付き照明コ
   - ESP32-S3
     - Seeed Studio XIAO ESP32S3
 - 開発環境
-  - [ESP-IDF](https://github.com/espressif/esp-idf) v5.4.2
+  - [ESP-IDF](https://github.com/espressif/esp-idf) v5.5.1
   - [ESP-Matter](https://github.com/espressif/esp-matter) v1.4
-  - [ESP32-Arduino](https://github.com/espressif/arduino-esp32) v3.2.1
+  - [ESP32-Arduino](https://github.com/espressif/arduino-esp32) v3.3.3
 
 ### 実機
 
@@ -142,7 +142,7 @@ ESP32で作るMatterスマートホーム対応の人感センサ付き照明コ
 - ESP32のUSBポート(非UARTポート)とPCを接続して下記コマンドを実行する。
 
 ```sh
-# at ESP-IDF v5.4.2 Environment
+# at ESP-IDF v5.5.1 Environment
 source $IDF_PATH/export.sh
 
 # go to firmware directory

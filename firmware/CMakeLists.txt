@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.16)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # Project config
-project(esp32_matter_device)
+project(esp32-matter-light)
 
 # Compile options
 idf_build_set_property(CXX_COMPILE_OPTIONS "-Os" APPEND)

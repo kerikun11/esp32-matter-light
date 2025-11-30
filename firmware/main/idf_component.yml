@@ -3,4 +3,4 @@ dependencies:
   espressif/esp_matter: # https://github.com/espressif/esp-matter.git
     version: ">=1.4.0"
   espressif/arduino-esp32: # https://github.com/espressif/arduino-esp32.git
-    version: ">=3.2.1"
+    version: ">=3.3.3"

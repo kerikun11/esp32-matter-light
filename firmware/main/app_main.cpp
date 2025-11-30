@@ -12,7 +12,7 @@ void setup() {
   Serial.begin(CONFIG_MONITOR_BAUD);
   app_.begin();
 
-  /*set log level*/
+  /* set log level */
   esp_log_level_set("esp_matter_attribute", ESP_LOG_WARN);
   esp_log_level_set("esp_matter_command", ESP_LOG_WARN);
   esp_log_level_set("ROUTE_HOOK", ESP_LOG_WARN);

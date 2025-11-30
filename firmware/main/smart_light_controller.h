@@ -202,10 +202,12 @@ void SmartLightController::handle() {
       LOGW("[IR-Tx] Light ON (size: %zu)", ir_data_light_on_.size());
       led_.blinkOnce(RgbLed::Color::Green);
       ir_remote_.send(ir_data_light_on_);
+      LOGW("[IR-Tx] Light ON sent");
     } else {
       LOGW("[IR-Tx] Light OFF (size: %zu)", ir_data_light_off_.size());
       led_.blinkOnce(RgbLed::Color::Green);
       ir_remote_.send(ir_data_light_off_);
+      LOGW("[IR-Tx] Light OFF sent");
     }
     delay(100);
   }
@@ -214,9 +216,9 @@ void SmartLightController::handle() {
   if (last_occupancy_state_ != occupancy_state) {
     last_occupancy_state_ = occupancy_state;
     if (occupancy_state) {
-      LOGW("[PIR] Motion Detected");
+      LOGI("[PIR] Motion Detected");
     } else {
-      LOGW("[PIR] No Motion Timeout");
+      LOGI("[PIR] No Motion Timeout");
     }
   }
 
