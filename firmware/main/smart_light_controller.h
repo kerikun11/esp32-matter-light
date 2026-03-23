@@ -18,6 +18,7 @@
 #include "smart_light_automation.h"
 #include "smart_light_commands.h"
 #include "smart_light_settings.h"
+#include "smart_light_web.h"
 
 class SmartLightController {
  public:
@@ -35,8 +36,9 @@ class SmartLightController {
   CommandParser command_parser_{Serial};
   SmartLightSettingsStore settings_store_;
   SmartLightSettings settings_;
-  SmartLightCommandHandler command_handler_;
   MatterLight matter_light_;
+  SmartLightCommandHandler command_handler_;
+  SmartLightWeb web_;
 
   bool last_light_state_ = false;
   bool last_switch_state_ = false;

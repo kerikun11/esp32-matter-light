@@ -9,7 +9,9 @@
 
 SmartLightController::SmartLightController()
     : command_handler_(command_parser_, settings_, settings_store_, ir_remote_,
-                       brightness_sensor_) {}
+                       brightness_sensor_),
+      web_(settings_, settings_store_, ir_remote_, brightness_sensor_,
+           matter_light_) {}
 
 void SmartLightController::begin() {
   led_.setBackground(RgbLed::Color::Green);
@@ -24,12 +26,19 @@ void SmartLightController::begin() {
   last_switch_state_ = true;
 
   setupOta();
+  web_.begin();
 }
 
 void SmartLightController::handle() {
   ArduinoOTA.handle();
+  web_.setObservedStates(last_light_state_, last_switch_state_);
+  web_.handle();
   if (command_handler_.handle()) {
     ArduinoOTA.setHostname(settings_.hostname.c_str());
+  }
+  if (web_.hostnameUpdated()) {
+    ArduinoOTA.setHostname(settings_.hostname.c_str());
+    web_.clearHostnameUpdated();
   }
 
   btn_.update();
@@ -47,6 +56,8 @@ void SmartLightController::handle() {
   state.light_off_timeout_seconds = settings_.light_off_timeout_seconds;
   state.ambient_light_mode_enabled = settings_.ambient_light_mode_enabled;
 
+  (void)web_.consumeRequestedLightState(state.light_state);
+  (void)web_.consumeRequestedSwitchState(state.switch_state);
   applyMatterEvents(state);
   SmartLightAutomation::applyButtonPress(btn_.pressed(), state);
   SmartLightAutomation::syncSwitchStateFromLight(
