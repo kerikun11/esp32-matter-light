@@ -7,6 +7,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+#include "app_log.h"
+
 class IRRemote {
  public:
   static constexpr const int RAW_DATA_BUFFER_SIZE = 800;
@@ -56,7 +58,7 @@ class IRRemote {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void IRRemote::begin(int tx, int rx) {
+inline void IRRemote::begin(int tx, int rx) {
   pin_tx_ = tx;
   pin_rx_ = rx;
   state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
@@ -66,12 +68,12 @@ void IRRemote::begin(int tx, int rx) {
   attachInterruptArg(pin_rx_, isrEntryPoint, this, CHANGE);
 }
 
-void IRRemote::clear() {
+inline void IRRemote::clear() {
   LOGD("[IR] clear");
   state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
 }
 
-bool IRRemote::available() {
+inline bool IRRemote::available() {
   noInterrupts();
   uint32_t diff = micros() - prev_us_;
   interrupts();
@@ -105,7 +107,7 @@ bool IRRemote::available() {
   return state_ == IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
 }
 
-bool IRRemote::waitForAvailable(int timeout_ms) {
+inline bool IRRemote::waitForAvailable(int timeout_ms) {
   unsigned long start = millis();
   while (!available()) {
     if (timeout_ms > 0 && millis() - start > timeout_ms) {
@@ -116,15 +118,15 @@ bool IRRemote::waitForAvailable(int timeout_ms) {
   return true;
 }
 
-IRRemote::IRData IRRemote::get() {
+inline IRRemote::IRData IRRemote::get() {
   return IRData{raw_data_, raw_data_ + raw_index_};
 }
 
-void IRRemote::isrEntryPoint(void* this_ptr) {
+inline void IRRemote::isrEntryPoint(void* this_ptr) {
   static_cast<IRRemote*>(this_ptr)->isr();
 }
 
-void IRRemote::send(const IRData& data) {
+inline void IRRemote::send(const IRData& data) {
   noInterrupts();
   {
     enum IR_RECEIVER_STATE state_cache = state_;
@@ -145,7 +147,7 @@ void IRRemote::send(const IRData& data) {
   LOGD("[IR] Send OK (size: %zu)", data.size());
 }
 
-void IRRemote::isr() {
+inline void IRRemote::isr() {
   uint64_t us = micros();
   uint32_t diff = us - prev_us_;
 
@@ -174,7 +176,7 @@ void IRRemote::isr() {
   prev_us_ = us;
 }
 
-void IRRemote::print(const IRData& data, const char* label) {
+inline void IRRemote::print(const IRData& data, const char* label) {
   if (label)
     LOGI("[IR] Raw Data (size: %zu) %s", data.size(), label);
   else
@@ -186,8 +188,8 @@ void IRRemote::print(const IRData& data, const char* label) {
   printf("\n");
 }
 
-bool IRRemote::isIrDataEqual(const IRData& a, const IRData& b,
-                             float tolerance_percent) {
+inline bool IRRemote::isIrDataEqual(const IRData& a, const IRData& b,
+                                    float tolerance_percent) {
   if (a.size() != b.size()) return false;
   for (size_t i = 0; i < a.size(); ++i) {
     float expected = static_cast<float>(b[i]);
@@ -200,15 +202,15 @@ bool IRRemote::isIrDataEqual(const IRData& a, const IRData& b,
   return true;
 }
 
-bool IRRemote::saveToPreferences(Preferences& prefs, const char* key,
-                                 const IRData& data) {
+inline bool IRRemote::saveToPreferences(Preferences& prefs, const char* key,
+                                        const IRData& data) {
   print(data, key);
   size_t size = data.size() * sizeof(IRDataElement);
   return size == prefs.putBytes(key, data.data(), size);
 }
 
-bool IRRemote::loadFromPreferences(Preferences& prefs, const char* key,
-                                   IRData& data) {
+inline bool IRRemote::loadFromPreferences(Preferences& prefs, const char* key,
+                                          IRData& data) {
   size_t size = prefs.getBytesLength(key);
   if (size == 0) return false;
   data.resize(size / sizeof(IRDataElement));

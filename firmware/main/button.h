@@ -39,7 +39,7 @@ class Button {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void Button::update() {
+inline void Button::update() {
   unsigned long now = millis();
   bool raw = digitalRead(pin_) == LOW;
 
