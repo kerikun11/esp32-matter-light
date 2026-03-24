@@ -19,6 +19,9 @@ SmartLightSettings SmartLightSettingsStore::load() {
                     SmartLightSettings::kLightOffTimeoutSecondsDefault);
   settings.ambient_light_mode_enabled =
       prefs_.getBool(SmartLightSettings::kPrefAmbient, true);
+  settings.ambient_light_threshold_percent =
+      prefs_.getInt(SmartLightSettings::kPrefAmbientThreshold,
+                    SmartLightSettings::kAmbientLightThresholdPercentDefault);
   IRRemote::loadFromPreferences(prefs_, SmartLightSettings::kPrefIrOn,
                                 settings.ir_data_light_on);
   IRRemote::loadFromPreferences(prefs_, SmartLightSettings::kPrefIrOff,
@@ -29,6 +32,8 @@ SmartLightSettings SmartLightSettingsStore::load() {
        settings.light_off_timeout_seconds);
   LOGI("[Prefs] ambient_light_mode_enabled: %d",
        settings.ambient_light_mode_enabled);
+  LOGI("[Prefs] ambient_light_threshold_percent: %d",
+       settings.ambient_light_threshold_percent);
   LOGI("[Prefs] IR ON Data size: %zu", settings.ir_data_light_on.size());
   LOGI("[Prefs] IR OFF Data size: %zu", settings.ir_data_light_off.size());
   return settings;
@@ -44,6 +49,11 @@ void SmartLightSettingsStore::saveLightOffTimeoutSeconds(int seconds) {
 
 void SmartLightSettingsStore::saveAmbientLightModeEnabled(bool enabled) {
   prefs_.putBool(SmartLightSettings::kPrefAmbient, enabled);
+}
+
+void SmartLightSettingsStore::saveAmbientLightThresholdPercent(
+    int threshold_percent) {
+  prefs_.putInt(SmartLightSettings::kPrefAmbientThreshold, threshold_percent);
 }
 
 void SmartLightSettingsStore::saveIrDataLightOn(const IRRemote::IRData& data) {

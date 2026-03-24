@@ -10,8 +10,7 @@
 SmartLightController::SmartLightController()
     : command_handler_(command_parser_, settings_, settings_store_, ir_remote_,
                        brightness_sensor_),
-      web_(settings_, settings_store_, ir_remote_, brightness_sensor_,
-           matter_light_) {}
+      web_(settings_, settings_store_, ir_remote_) {}
 
 void SmartLightController::begin() {
   led_.setBackground(RgbLed::Color::Green);
@@ -31,7 +30,15 @@ void SmartLightController::begin() {
 
 void SmartLightController::handle() {
   ArduinoOTA.handle();
-  web_.setObservedStates(last_light_state_, last_switch_state_);
+
+  btn_.update();
+  led_.update();
+  motion_sensor_.update();
+  brightness_sensor_.update(
+      static_cast<float>(settings_.ambient_light_threshold_percent) / 100.0f);
+  web_.setObservedStates(
+      last_light_state_, last_switch_state_,
+      static_cast<int>(brightness_sensor_.getNormalized() * 100.0f + 0.5f));
   web_.handle();
   if (command_handler_.handle()) {
     ArduinoOTA.setHostname(settings_.hostname.c_str());
@@ -40,11 +47,6 @@ void SmartLightController::handle() {
     ArduinoOTA.setHostname(settings_.hostname.c_str());
     web_.clearHostnameUpdated();
   }
-
-  btn_.update();
-  led_.update();
-  motion_sensor_.update();
-  brightness_sensor_.update();
 
   SmartLightRuntimeState state;
   state.light_state = last_light_state_;
@@ -182,7 +184,11 @@ void SmartLightController::updateStatusLed(
 void SmartLightController::handleDecommission() {
   if (btn_.longHoldStarted()) led_.blinkOnce(RgbLed::Color::Magenta);
   if (btn_.longPressed()) {
-    matter_light_.decommission();
+    if (matter_light_.isCommissioned()) {
+      matter_light_.decommission();
+    } else {
+      matter_light_.openCommissioningWindow();
+    }
   }
 
   if (!matter_light_.isCommissioned()) {

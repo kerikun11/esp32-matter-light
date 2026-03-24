@@ -12,16 +12,17 @@ void SmartLightWeb::begin() {
   server_.on("/settings", HTTP_POST, [this]() { handleSaveSettings(); });
   server_.on("/record", HTTP_POST, [this]() { handleRecord(); });
   server_.on("/action", HTTP_POST, [this]() { handleAction(); });
-  server_.on("/reboot", HTTP_POST, [this]() { handleReboot(); });
   server_.begin();
   LOGI("[Web] HTTP server started on port 80");
 }
 
 void SmartLightWeb::handle() { server_.handleClient(); }
 
-void SmartLightWeb::setObservedStates(bool light_state, bool switch_state) {
+void SmartLightWeb::setObservedStates(bool light_state, bool switch_state,
+                                      int ambient_light_percent) {
   observed_light_state_ = light_state;
   observed_switch_state_ = switch_state;
+  observed_ambient_light_percent_ = ambient_light_percent;
 }
 
 bool SmartLightWeb::consumeRequestedLightState(bool& light_state) {
@@ -41,56 +42,33 @@ bool SmartLightWeb::consumeRequestedSwitchState(bool& switch_state) {
 void SmartLightWeb::handleRoot() { sendPage(); }
 
 void SmartLightWeb::handleSaveSettings() {
-  if (!server_.hasArg("hostname") || !server_.hasArg("timeout")) {
-    sendPage("hostname and timeout are required", true);
-    return;
-  }
-
   const String hostname = server_.arg("hostname");
   const int timeout_seconds = server_.arg("timeout").toInt();
+  const int ambient_threshold = server_.arg("ambient_threshold").toInt();
   const bool ambient_enabled = server_.hasArg("ambient");
-
-  if (hostname.isEmpty()) {
-    sendPage("hostname must not be empty", true);
-    return;
-  }
-  if (timeout_seconds <= 0) {
-    sendPage("timeout must be greater than 0", true);
-    return;
-  }
-
-  settings_.hostname = hostname.c_str();
-  settings_.light_off_timeout_seconds = timeout_seconds;
+  settings_.hostname = hostname.length() ? hostname.c_str() : settings_.hostname;
+  settings_.light_off_timeout_seconds =
+      timeout_seconds > 0 ? timeout_seconds : settings_.light_off_timeout_seconds;
   settings_.ambient_light_mode_enabled = ambient_enabled;
+  if (ambient_threshold >= 0 && ambient_threshold <= 100) {
+    settings_.ambient_light_threshold_percent = ambient_threshold;
+  }
 
   settings_store_.saveHostname(settings_.hostname);
-  settings_store_.saveLightOffTimeoutSeconds(timeout_seconds);
+  settings_store_.saveLightOffTimeoutSeconds(settings_.light_off_timeout_seconds);
   settings_store_.saveAmbientLightModeEnabled(ambient_enabled);
+  settings_store_.saveAmbientLightThresholdPercent(
+      settings_.ambient_light_threshold_percent);
   hostname_updated_ = true;
-
-  LOGI("[Web] Settings updated");
-  sendPage("settings saved");
+  redirectRoot();
 }
 
 void SmartLightWeb::handleRecord() {
-  if (!server_.hasArg("target")) {
-    sendPage("target must be on or off", true);
-    return;
-  }
-
   const String target = server_.arg("target");
-  if (target != "on" && target != "off") {
-    sendPage("target must be on or off", true);
-    return;
-  }
+  if (target != "on" && target != "off") return redirectRoot();
 
   ir_remote_.clear();
-  LOGI("[Web] IR receiver listening for %s", target.c_str());
-  if (!ir_remote_.waitForAvailable(10000)) {
-    LOGW("[Web] IR record timeout");
-    sendPage("IR recording timed out", true);
-    return;
-  }
+  if (!ir_remote_.waitForAvailable(10000)) return redirectRoot();
 
   const auto ir_data = ir_remote_.get();
   if (target == "on") {
@@ -100,183 +78,92 @@ void SmartLightWeb::handleRecord() {
     settings_.ir_data_light_off = ir_data;
     settings_store_.saveIrDataLightOff(settings_.ir_data_light_off);
   }
-
-  sendPage(String("IR data recorded for ") + target);
+  redirectRoot();
 }
 
 void SmartLightWeb::handleAction() {
-  if (!server_.hasArg("target") || !server_.hasArg("state")) {
-    sendPage("target and state are required", true);
-    return;
-  }
-
   const String target = server_.arg("target");
   const String state = server_.arg("state");
   const bool enabled = state == "on";
-  if (state != "on" && state != "off") {
-    sendPage("state must be on or off", true);
-    return;
-  }
+  if (state != "on" && state != "off") return redirectRoot();
 
   if (target == "light") {
     requested_light_state_ = enabled;
     requested_light_state_pending_ = true;
-    sendPage(String("light turned ") + state);
-    return;
+    return redirectRoot();
   }
   if (target == "switch") {
     requested_switch_state_ = enabled;
     requested_switch_state_pending_ = true;
-    sendPage(String("switch turned ") + state);
-    return;
+    return redirectRoot();
   }
-
-  sendPage("target must be light or switch", true);
+  if (target == "ambient") {
+    settings_.ambient_light_mode_enabled = enabled;
+    settings_store_.saveAmbientLightModeEnabled(enabled);
+    return redirectRoot();
+  }
+  redirectRoot();
 }
 
-void SmartLightWeb::handleReboot() {
-  server_.send(200, "text/html; charset=utf-8",
-               "<!doctype html><html><body><p>Rebooting...</p></body></html>");
-  delay(100);
-  ESP.restart();
+void SmartLightWeb::redirectRoot() {
+  server_.sendHeader("Location", "/", true);
+  server_.send(303, "text/plain", "");
 }
 
-void SmartLightWeb::sendPage(const String& message, bool is_error) {
-  server_.send(200, "text/html; charset=utf-8", buildPage(message, is_error));
-}
+void SmartLightWeb::sendPage() { server_.send(200, "text/html", buildPage()); }
 
-String SmartLightWeb::buildPage(const String& message, bool is_error) const {
+String SmartLightWeb::buildPage() const {
   String html;
   html.reserve(4096);
 
-  const String ip = WiFi.isConnected() ? WiFi.localIP().toString() : "not connected";
-  const String brightness = String(brightness_sensor_.getNormalized(), 3);
-  const String ambient_checked =
-      settings_.ambient_light_mode_enabled ? "checked" : "";
-  const String commissioned = matter_light_.isCommissioned() ? "yes" : "no";
-  const String connected = matter_light_.isConnected() ? "yes" : "no";
-  const String alert_class = is_error ? "error" : "ok";
+  const String ambient_threshold = String(settings_.ambient_light_threshold_percent);
   const String light_state = observed_light_state_ ? "ON" : "OFF";
   const String switch_state = observed_switch_state_ ? "ON" : "OFF";
+  const String light_class = observed_light_state_ ? "on" : "off";
+  const String switch_class = observed_switch_state_ ? "on" : "off";
+  const String ambient_value = String(observed_ambient_light_percent_);
+  const String ambient_state =
+      settings_.ambient_light_mode_enabled ? "Enabled" : "Disabled";
+  const String ambient_class =
+      settings_.ambient_light_mode_enabled ? "on" : "off";
 
-  html += "<!doctype html><html><head><meta charset='utf-8'>";
-  html += "<meta name='viewport' content='width=device-width,initial-scale=1'>";
-  html += "<title>Smart Light Settings</title>";
-  html +=
-      "<style>"
-      ":root{color-scheme:light;background:#f4efe7;color:#1f2933;font-family:"
-      "\"Avenir Next\",sans-serif;}"
-      "body{margin:0;background:linear-gradient(160deg,#f4efe7,#e6f0ea);}"
-      ".wrap{max-width:820px;margin:0 auto;padding:24px;}"
-      ".card{background:rgba(255,255,255,.88);backdrop-filter:blur(10px);"
-      "border:1px solid rgba(31,41,51,.08);border-radius:20px;padding:20px;"
-      "box-shadow:0 20px 50px rgba(31,41,51,.08);margin-bottom:18px;}"
-      "h1,h2{margin:0 0 12px 0;letter-spacing:.02em;}"
-      "p{margin:0 0 10px 0;line-height:1.5;}"
-      ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}"
-      "label{display:block;font-size:14px;margin-bottom:6px;font-weight:600;}"
-      "input[type=text],input[type=number]{width:100%;box-sizing:border-box;"
-      "padding:12px 14px;border-radius:12px;border:1px solid #cdd7df;background:#fff;}"
-      ".row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}"
-      "button{border:0;border-radius:999px;padding:11px 16px;font-weight:700;"
-      "background:#0f766e;color:#fff;cursor:pointer;}"
-      "button.alt{background:#334155;}"
-      "button.warn{background:#b45309;}"
-      ".muted{color:#52606d;font-size:14px;}"
-      ".pill{display:inline-block;padding:4px 10px;border-radius:999px;"
-      "background:#e8f4ef;font-size:13px;margin-right:6px;margin-bottom:6px;}"
-      ".alert{padding:12px 14px;border-radius:12px;margin-bottom:16px;font-weight:600;}"
-      ".alert.ok{background:#d1fae5;color:#065f46;}"
-      ".alert.error{background:#fee2e2;color:#991b1b;}"
-      "</style></head><body><div class='wrap'>";
+  html += "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Smart Light Controller</title>";
+  html += "<style>:root{--bg:#f3f6fb;--panel:#ffffff;--line:#dbe3ef;--ink:#17212b;--muted:#64748b;--accent:#2563eb;--accent-soft:#e8f0ff;--good:#15803d;--good-soft:#e8f7ee;--bad:#b42318;--bad-soft:#fdecec;--shadow:0 10px 30px rgba(15,23,42,.08)}*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#f8fbff 0,#eef3f9 100%);color:var(--ink);font:15px/1.5 Inter,Segoe UI,Helvetica,sans-serif}main{max-width:880px;margin:0 auto;padding:24px 16px 40px}.hero,.card,.fold{background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow)}.hero{padding:24px}.hero h1{margin:0 0 6px;font-size:32px;line-height:1.05}.sub{margin:0;color:var(--muted)}.topbar,.stats,.control-grid,.two-col{display:grid;gap:14px}.topbar{grid-template-columns:1.25fr .75fr;margin-top:18px}.stats{grid-template-columns:repeat(2,1fr)}.stat,.card{padding:18px}.label{display:block;margin-bottom:8px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.value{font-size:24px;font-weight:700}.meta{margin-top:10px;color:var(--muted);font-size:14px}.card h2{margin:0 0 14px;font-size:20px}.control-grid{grid-template-columns:repeat(3,1fr)}.control-item{display:grid;gap:10px}.toggle-form{margin:0}.toggle-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:116px;padding:10px 14px;border:none;border-radius:999px;font-size:14px;font-weight:700;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,filter .16s ease}.toggle-btn:before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor}.toggle-btn.on{background:var(--good-soft);color:var(--good)}.toggle-btn.off{background:var(--bad-soft);color:var(--bad)}.toggle-btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(15,23,42,.08);filter:brightness(.96)}.two-col{grid-template-columns:1fr;margin-top:14px}.stack{display:grid;gap:14px}form{margin:0}.field{display:grid;gap:6px}.field span{color:var(--muted);font-size:13px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px}.range-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}input[type=text],input[type=number]{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit}input[type=range]{width:100%;accent-color:var(--accent)}button{appearance:none;border:none;border-radius:12px;padding:11px 14px;background:var(--accent);color:#fff;font:700 14px/1 Inter,Segoe UI,sans-serif;cursor:pointer;transition:background-color .16s ease,transform .16s ease,box-shadow .16s ease}button:hover{background:#1d4ed8;box-shadow:0 8px 18px rgba(37,99,235,.18)}button.warn{background:#0f172a;color:#fff}button.warn:hover{background:#1e293b}.mini{font-size:13px;color:var(--muted)}details.fold{overflow:hidden;margin-top:14px}details.fold summary{list-style:none;cursor:pointer;padding:18px 20px;font-weight:700}details.fold summary::-webkit-details-marker{display:none}details.fold summary span{color:var(--muted);font-weight:600;margin-left:8px}details.fold .body{padding:0 20px 20px}@media (max-width:760px){.topbar,.stats,.control-grid,.two-col{grid-template-columns:1fr}.hero h1{font-size:28px}}</style></head><body><main>";
 
-  html += "<div class='card'><h1>Smart Light Control</h1>";
-  html += "<p class='muted'>Serial console settings are available from the browser.</p>";
-  if (message.length() > 0) {
-    html += "<div class='alert ";
-    html += alert_class;
-    html += "'>";
-    html += htmlEscape(message);
-    html += "</div>";
-  }
-  html += "<div class='row'>";
-  html += "<span class='pill'>IP: " + htmlEscape(ip) + "</span>";
-  html += "<span class='pill'>Matter connected: " + connected + "</span>";
-  html += "<span class='pill'>Commissioned: " + commissioned + "</span>";
-  html += "<span class='pill'>Light: " + light_state + "</span>";
-  html += "<span class='pill'>Switch: " + switch_state + "</span>";
-  html += "</div></div>";
+  html += "<section class=hero><h1><a href=/ style='color:inherit;text-decoration:none'>Smart Light Controller</a></h1><div class=topbar><section class=card><div class=control-grid><div class=control-item><span class=label>Light</span><form class=toggle-form method=post action=/action><input type=hidden name=target value=light><input type=hidden name=state value='";
+  html += observed_light_state_ ? "off" : "on";
+  html += "'><button class='toggle-btn ";
+  html += light_class;
+  html += "'>";
+  html += light_state;
+  html += "</button></form></div><div class=control-item><span class=label>Motion Link</span><form class=toggle-form method=post action=/action><input type=hidden name=target value=switch><input type=hidden name=state value='";
+  html += observed_switch_state_ ? "off" : "on";
+  html += "'><button class='toggle-btn ";
+  html += switch_class;
+  html += "'>";
+  html += switch_state;
+  html += "</button></form></div><div class=control-item><span class=label>Ambient Mode</span><form class=toggle-form method=post action=/action><input type=hidden name=target value=ambient><input type=hidden name=state value='";
+  html += settings_.ambient_light_mode_enabled ? "off" : "on";
+  html += "'><button class='toggle-btn ";
+  html += ambient_class;
+  html += "'>";
+  html += ambient_state;
+  html += "</button></form></div></div></section><div class=stats>";
+  html += "<div class=stat><span class=label>Ambient Light</span><div class=value>";
+  html += ambient_value;
+  html += "%</div></div></div></div></section>";
 
-  html += "<div class='card'><h2>Manual Control</h2>";
-  html += "<p class='muted'>These buttons request the same internal states that Matter events update.</p>";
-  html += "<div class='row'>";
-  html += "<form method='post' action='/action'><input type='hidden' name='target' value='light'><input type='hidden' name='state' value='on'><button type='submit'>Light ON</button></form>";
-  html += "<form method='post' action='/action'><input type='hidden' name='target' value='light'><input type='hidden' name='state' value='off'><button class='alt' type='submit'>Light OFF</button></form>";
-  html += "<form method='post' action='/action'><input type='hidden' name='target' value='switch'><input type='hidden' name='state' value='on'><button type='submit'>Switch ON</button></form>";
-  html += "<form method='post' action='/action'><input type='hidden' name='target' value='switch'><input type='hidden' name='state' value='off'><button class='alt' type='submit'>Switch OFF</button></form>";
-  html += "</div></div>";
-
-  html += "<div class='card'><h2>Settings</h2>";
-  html += "<form method='post' action='/settings'>";
-  html += "<div class='grid'>";
-  html += "<div><label for='hostname'>Hostname</label>";
-  html += "<input id='hostname' name='hostname' type='text' value='";
-  html += htmlEscape(settings_.hostname.c_str());
-  html += "'></div>";
-  html += "<div><label for='timeout'>Light Off Timeout (seconds)</label>";
-  html += "<input id='timeout' name='timeout' type='number' min='1' value='";
+  html += "<div class=two-col><details class=fold><summary>Settings<span>Click to expand</span></summary><div class=body><form class=stack method=post action=/settings><label class=field><span>Hostname</span><input name=hostname value='";
+  html += settings_.hostname.c_str();
+  html += "'></label><div class=row><label class=field style='flex:1'><span>Light Off Timeout</span><input name=timeout type=number min=1 value='";
   html += String(settings_.light_off_timeout_seconds);
-  html += "'></div></div>";
-  html += "<p><label><input type='checkbox' name='ambient' ";
-  html += ambient_checked;
-  html += "> Ambient Light Mode</label></p>";
-  html += "<div class='row'><button type='submit'>Save Settings</button></div>";
-  html += "</form></div>";
+  html += "'></label></div><div class=field><span>Ambient Mode Threshold</span><div class=range-row><input id=t name=ambient_threshold type=range min=0 max=100 value='";
+  html += ambient_threshold;
+  html += "' oninput='tv.textContent=this.value'><strong><span id=tv>";
+  html += ambient_threshold;
+  html += "</span>%</strong></div></div><div class=row><p class=mini>Changes are stored immediately after save.</p><button>Save Settings</button></div></form></div></details><details class=fold><summary>Learn IR<span>Click to expand</span></summary><div class=body><p class=mini>Press a record button, then send the remote signal within 10 seconds.</p><form class=group method=post action=/record><button class=warn name=target value=on>Record ON</button><button class=warn name=target value=off>Record OFF</button></form></div></details></div>";
 
-  html += "<div class='card'><h2>Info</h2>";
-  html += "<p>Brightness sensor value: " + brightness + "</p>";
-  html += "<p>IR ON data size: " + String(settings_.ir_data_light_on.size()) + "</p>";
-  html += "<p>IR OFF data size: " + String(settings_.ir_data_light_off.size()) + "</p>";
-  html += "</div>";
-
-  html += "<div class='card'><h2>IR Recording</h2>";
-  html += "<p class='muted'>Press a button on the remote within 10 seconds after starting recording.</p>";
-  html += "<div class='row'>";
-  html += "<form method='post' action='/record'><input type='hidden' name='target' value='on'><button class='alt' type='submit'>Record ON</button></form>";
-  html += "<form method='post' action='/record'><input type='hidden' name='target' value='off'><button class='alt' type='submit'>Record OFF</button></form>";
-  html += "</div></div>";
-
-  html += "<div class='card'><h2>Device</h2>";
-  html += "<div class='row'><form method='post' action='/reboot'><button class='warn' type='submit'>Reboot</button></form></div>";
-  html += "</div></div></body></html>";
+  html += "</main></body></html>";
 
   return html;
-}
-
-String SmartLightWeb::htmlEscape(const String& input) const {
-  String out;
-  out.reserve(input.length() + 16);
-  for (size_t i = 0; i < input.length(); ++i) {
-    switch (input[i]) {
-      case '&':
-        out += "&amp;";
-        break;
-      case '<':
-        out += "&lt;";
-        break;
-      case '>':
-        out += "&gt;";
-        break;
-      case '"':
-        out += "&quot;";
-        break;
-      case '\'':
-        out += "&#39;";
-        break;
-      default:
-        out += input[i];
-        break;
-    }
-  }
-  return out;
 }

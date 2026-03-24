@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <lib/core/TLV.h>
 #include <platform/ConfigurationManager.h>
+#include <system/SystemClock.h>
 
 class MatterLight {
  public:
@@ -121,6 +122,19 @@ class MatterLight {
 
   bool setLightState(bool on) { return setOnOffAttr_(ep_light_, on); }
   bool setSwitchState(bool on) { return setOnOffAttr_(ep_plugin_, on); }
+
+  bool openCommissioningWindow(uint16_t timeout_seconds = 300) {
+    auto err = chip::Server::GetInstance().GetCommissioningWindowManager()
+                   .OpenBasicCommissioningWindow(
+                       chip::System::Clock::Seconds32(timeout_seconds));
+    if (err != CHIP_NO_ERROR) {
+      ESP_LOGE(TAG, "OpenBasicCommissioningWindow failed: %" CHIP_ERROR_FORMAT,
+               err.Format());
+      return false;
+    }
+    printOnboarding();
+    return true;
+  }
 
   void decommission() {
     ESP_LOGW(TAG, "Decommissioning device...");
