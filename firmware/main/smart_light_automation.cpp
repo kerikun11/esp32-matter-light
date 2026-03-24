@@ -12,6 +12,7 @@ void SmartLightAutomation::applyMatterEvent(const MatterLight::Event& event,
                                             bool& force_light_resync) {
   state.light_state = event.light_state;
   state.switch_state = event.switch_state;
+  state.night_state = event.night_state;
 
   switch (event.type) {
     case MatterLight::EventType::LightOn:
@@ -28,6 +29,12 @@ void SmartLightAutomation::applyMatterEvent(const MatterLight::Event& event,
     case MatterLight::EventType::SwitchOff:
       LOGW("[Event] Switch OFF");
       break;
+    case MatterLight::EventType::NightOn:
+      LOGW("[Event] Night ON");
+      break;
+    case MatterLight::EventType::NightOff:
+      LOGW("[Event] Night OFF");
+      break;
   }
 }
 
@@ -38,9 +45,51 @@ void SmartLightAutomation::applyButtonPress(bool pressed,
   LOGW("[LightState] %d (Button)", state.light_state);
 }
 
-void SmartLightAutomation::syncSwitchStateFromLight(
-    bool light_state_changed, SmartLightRuntimeState& state) {
-  if (!light_state_changed) return;
+SmartLightStateDelta SmartLightAutomation::computeStateDelta(
+    const SmartLightRuntimeState& previous_state,
+    const SmartLightRuntimeState& state) {
+  SmartLightStateDelta delta;
+  delta.light_state_changed = previous_state.light_state != state.light_state;
+  delta.switch_state_changed = previous_state.switch_state != state.switch_state;
+  delta.night_state_changed = previous_state.night_state != state.night_state;
+  return delta;
+}
+
+void SmartLightAutomation::applyDerivedRules(
+    const SmartLightRuntimeState& previous_state,
+    SmartLightRuntimeState& state) {
+  applyLightNightInterlock_(computeStateDelta(previous_state, state), state);
+  applyNightSwitchInterlock_(state);
+  if (!state.night_state) {
+    syncSwitchStateFromLight_(computeStateDelta(previous_state, state), state);
+  }
+  applyOccupancyRules(state);
+  applyNightSwitchInterlock_(state);
+}
+
+void SmartLightAutomation::applyLightNightInterlock_(
+    const SmartLightStateDelta& delta, SmartLightRuntimeState& state) {
+  if (delta.light_state_changed && state.night_state) {
+    state.night_state = false;
+    LOGW("[NightState] %d (LightState)", state.night_state);
+  }
+  if (delta.night_state_changed && state.light_state) {
+    state.light_state = false;
+    LOGW("[LightState] %d (NightState)", state.light_state);
+  }
+}
+
+void SmartLightAutomation::applyNightSwitchInterlock_(
+    SmartLightRuntimeState& state) {
+  if (!state.night_state || !state.switch_state) return;
+
+  state.switch_state = false;
+  LOGW("[SwitchState] %d (NightState)", state.switch_state);
+}
+
+void SmartLightAutomation::syncSwitchStateFromLight_(
+    const SmartLightStateDelta& delta, SmartLightRuntimeState& state) {
+  if (!delta.light_state_changed) return;
 
   if (state.occupancy_state) {
     state.switch_state = state.light_state;

@@ -20,9 +20,10 @@ void SmartLightController::begin() {
 
   ir_remote_.begin(CONFIG_APP_PIN_IR_TRANSMITTER, CONFIG_APP_PIN_IR_RECEIVER);
 
-  matter_light_.begin(true, true);
+  matter_light_.begin(true, true, false);
   last_light_state_ = false;
   last_switch_state_ = true;
+  last_night_state_ = false;
 
   setupOta();
   web_.begin();
@@ -37,38 +38,21 @@ void SmartLightController::handle() {
   brightness_sensor_.update(
       static_cast<float>(settings_.ambient_light_threshold_percent) / 100.0f);
   web_.setObservedStates(
-      last_light_state_, last_switch_state_,
+      last_light_state_, last_switch_state_, last_night_state_,
       static_cast<int>(brightness_sensor_.getNormalized() * 100.0f + 0.5f));
   web_.handle();
-  if (command_handler_.handle()) {
-    ArduinoOTA.setHostname(settings_.hostname.c_str());
-  }
-  if (web_.hostnameUpdated()) {
-    ArduinoOTA.setHostname(settings_.hostname.c_str());
-    web_.clearHostnameUpdated();
-  }
+  syncHostnameIfNeeded_();
 
-  SmartLightRuntimeState state;
-  state.light_state = last_light_state_;
-  state.switch_state = last_switch_state_;
-  state.seconds_since_last_motion = motion_sensor_.getSecondsSinceLastMotion();
-  state.occupancy_state =
-      motion_sensor_.isOccupied(SmartLightAutomation::kOccupancyTimeoutSeconds);
-  state.is_bright = brightness_sensor_.isBright();
-  state.light_off_timeout_seconds = settings_.light_off_timeout_seconds;
-  state.ambient_light_mode_enabled = settings_.ambient_light_mode_enabled;
-
+  SmartLightRuntimeState state = buildRuntimeState_();
+  const SmartLightRuntimeState previous_state = state;
   (void)web_.consumeRequestedLightState(state.light_state);
   (void)web_.consumeRequestedSwitchState(state.switch_state);
+  (void)web_.consumeRequestedNightState(state.night_state);
   applyMatterEvents(state);
   SmartLightAutomation::applyButtonPress(btn_.pressed(), state);
-  SmartLightAutomation::syncSwitchStateFromLight(
-      last_light_state_ != state.light_state, state);
-  SmartLightAutomation::applyOccupancyRules(state);
   applyIrInput(state);
-
-  commitSwitchState(state);
-  commitLightState(state);
+  SmartLightAutomation::applyDerivedRules(previous_state, state);
+  commitOutputs_(state);
   updateOccupancyLog(state.occupancy_state);
   updateStatusLed(state);
   handleDecommission();
@@ -90,6 +74,51 @@ void SmartLightController::setupOta() {
   });
   ArduinoOTA.onError([](ota_error_t error) { LOGI("[OTA] Error: %d", error); });
   ArduinoOTA.begin();
+}
+
+void SmartLightController::syncHostnameIfNeeded_() {
+  if (command_handler_.handle()) {
+    ArduinoOTA.setHostname(settings_.hostname.c_str());
+  }
+  if (!web_.hostnameUpdated()) return;
+
+  ArduinoOTA.setHostname(settings_.hostname.c_str());
+  web_.clearHostnameUpdated();
+}
+
+SmartLightRuntimeState SmartLightController::buildRuntimeState_() const {
+  SmartLightRuntimeState state;
+  state.light_state = last_light_state_;
+  state.switch_state = last_switch_state_;
+  state.night_state = last_night_state_;
+  state.seconds_since_last_motion = motion_sensor_.getSecondsSinceLastMotion();
+  state.occupancy_state =
+      motion_sensor_.isOccupied(SmartLightAutomation::kOccupancyTimeoutSeconds);
+  state.is_bright = brightness_sensor_.isBright();
+  state.light_off_timeout_seconds = settings_.light_off_timeout_seconds;
+  state.ambient_light_mode_enabled = settings_.ambient_light_mode_enabled;
+  return state;
+}
+
+void SmartLightController::commitOutputs_(const SmartLightRuntimeState& state) {
+  const bool suppress_night_off_signal =
+      last_night_state_ && !state.night_state && !last_light_state_ &&
+      state.light_state;
+  const bool suppress_light_off_signal =
+      last_light_state_ && !state.light_state && !last_night_state_ &&
+      state.night_state;
+  commitSwitchState(state);
+  commitNightState(state, suppress_night_off_signal);
+  commitLightState(state, suppress_light_off_signal);
+}
+
+void SmartLightController::sendIrSignal_(const IRRemote::IRData& data,
+                                         const char* label) {
+  LOGW("[IR-Tx] %s (size: %zu)", label, data.size());
+  led_.blinkOnce(RgbLed::Color::Green);
+  ir_remote_.send(data);
+  LOGW("[IR-Tx] %s sent", label);
+  delay(100);
 }
 
 void SmartLightController::applyMatterEvents(SmartLightRuntimeState& state) {
@@ -145,24 +174,31 @@ void SmartLightController::commitSwitchState(
   matter_light_.setSwitchState(state.switch_state);
 }
 
-void SmartLightController::commitLightState(const SmartLightRuntimeState& state) {
+void SmartLightController::commitNightState(const SmartLightRuntimeState& state,
+                                            bool suppress_off_signal) {
+  if (last_night_state_ == state.night_state) return;
+  last_night_state_ = state.night_state;
+  matter_light_.setNightState(state.night_state);
+
+  if (state.night_state) {
+    sendIrSignal_(settings_.ir_data_night, "Night ON");
+  } else if (!suppress_off_signal) {
+    sendIrSignal_(settings_.ir_data_light_off, "Light OFF (Night OFF)");
+  }
+}
+
+void SmartLightController::commitLightState(const SmartLightRuntimeState& state,
+                                            bool suppress_off_signal) {
   if (last_light_state_ == state.light_state) return;
 
   last_light_state_ = state.light_state;
   matter_light_.setLightState(state.light_state);
 
   if (state.light_state) {
-    LOGW("[IR-Tx] Light ON (size: %zu)", settings_.ir_data_light_on.size());
-    led_.blinkOnce(RgbLed::Color::Green);
-    ir_remote_.send(settings_.ir_data_light_on);
-    LOGW("[IR-Tx] Light ON sent");
-  } else {
-    LOGW("[IR-Tx] Light OFF (size: %zu)", settings_.ir_data_light_off.size());
-    led_.blinkOnce(RgbLed::Color::Green);
-    ir_remote_.send(settings_.ir_data_light_off);
-    LOGW("[IR-Tx] Light OFF sent");
+    sendIrSignal_(settings_.ir_data_light_on, "Light ON");
+  } else if (!suppress_off_signal) {
+    sendIrSignal_(settings_.ir_data_light_off, "Light OFF");
   }
-  delay(100);
 }
 
 void SmartLightController::updateOccupancyLog(bool occupancy_state) {

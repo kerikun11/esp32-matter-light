@@ -21,13 +21,14 @@ class SmartLightWeb {
 
   void begin();
   void handle();
-  void setObservedStates(bool light_state, bool switch_state,
+  void setObservedStates(bool light_state, bool switch_state, bool night_state,
                          int ambient_light_percent);
 
   bool hostnameUpdated() const { return hostname_updated_; }
   void clearHostnameUpdated() { hostname_updated_ = false; }
   bool consumeRequestedLightState(bool& light_state);
   bool consumeRequestedSwitchState(bool& switch_state);
+  bool consumeRequestedNightState(bool& night_state);
 
  private:
   SmartLightSettings& settings_;
@@ -37,11 +38,14 @@ class SmartLightWeb {
   bool hostname_updated_ = false;
   bool observed_light_state_ = false;
   bool observed_switch_state_ = false;
+  bool observed_night_state_ = false;
   int observed_ambient_light_percent_ = 0;
   bool requested_light_state_pending_ = false;
   bool requested_light_state_ = false;
   bool requested_switch_state_pending_ = false;
   bool requested_switch_state_ = false;
+  bool requested_night_state_pending_ = false;
+  bool requested_night_state_ = false;
 
   void handleRoot();
   void handleSaveSettings();

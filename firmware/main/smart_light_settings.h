@@ -19,6 +19,7 @@ struct SmartLightSettings {
   static constexpr const char* kPrefAmbientThreshold = "ambient_th";
   static constexpr const char* kPrefIrOn = "ir_on";
   static constexpr const char* kPrefIrOff = "ir_off";
+  static constexpr const char* kPrefIrNight = "ir_night";
 
   static constexpr const char* kHostnameDefault = "esp32-matter-light";
   static constexpr int kLightOffTimeoutSecondsDefault = 5 * 60;
@@ -30,6 +31,7 @@ struct SmartLightSettings {
   int ambient_light_threshold_percent = kAmbientLightThresholdPercentDefault;
   IRRemote::IRData ir_data_light_on;
   IRRemote::IRData ir_data_light_off;
+  IRRemote::IRData ir_data_night;
 };
 
 class SmartLightSettingsStore {
@@ -43,6 +45,7 @@ class SmartLightSettingsStore {
   void saveAmbientLightThresholdPercent(int threshold_percent);
   void saveIrDataLightOn(const IRRemote::IRData& data);
   void saveIrDataLightOff(const IRRemote::IRData& data);
+  void saveIrDataNight(const IRRemote::IRData& data);
 
  private:
   Preferences prefs_;

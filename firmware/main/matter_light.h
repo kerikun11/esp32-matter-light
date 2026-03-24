@@ -29,6 +29,8 @@ class MatterLight {
     LightOff,
     SwitchOn,
     SwitchOff,
+    NightOn,
+    NightOff,
   };
 
   struct Event {
@@ -36,6 +38,7 @@ class MatterLight {
     EventType type;
     bool light_state;
     bool switch_state;
+    bool night_state;
   };
 
   static constexpr const char *kManualCode = "34970112332";
@@ -43,7 +46,8 @@ class MatterLight {
       "https://project-chip.github.io/connectedhomeip/"
       "qrcode.html?data=MT:Y.K9042C00KA0648G00";
 
-  bool begin(bool initial_light_on, bool initial_switch_on) {
+  bool begin(bool initial_light_on, bool initial_switch_on,
+             bool initial_night_on = false) {
     esp_matter::node::config_t node_cfg{};
     node_ = esp_matter::node::create(&node_cfg, nullptr, nullptr, this);
     if (!node_) {
@@ -77,6 +81,19 @@ class MatterLight {
       }
     }
 
+    // Plugin endpoint (night)
+    {
+      esp_matter::endpoint::on_off_plugin_unit::config_t cfg{};
+      cfg.on_off.on_off = initial_night_on;
+      ep_night_ =
+          esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg, 0, this);
+      if (!ep_night_ || !registerOnOffCbs_(ep_night_) ||
+          !setOnOffAttr_(ep_night_, initial_night_on)) {
+        ESP_LOGE(TAG, "night::create failed");
+        return false;
+      }
+    }
+
     if (!registerInstance_(this)) {
       ESP_LOGE(TAG, "instance registry full");
       return false;
@@ -93,11 +110,14 @@ class MatterLight {
       return false;
     }
 
-    ESP_LOGI(TAG, "light_ep=0x%04x(%s) plugin_ep=0x%04x(%s)",
+    ESP_LOGI(TAG,
+             "light_ep=0x%04x(%s) plugin_ep=0x%04x(%s) night_ep=0x%04x(%s)",
              esp_matter::endpoint::get_id(ep_light_),
              initial_light_on ? "ON" : "OFF",
              esp_matter::endpoint::get_id(ep_plugin_),
-             initial_switch_on ? "ON" : "OFF");
+             initial_switch_on ? "ON" : "OFF",
+             esp_matter::endpoint::get_id(ep_night_),
+             initial_night_on ? "ON" : "OFF");
     printOnboarding();
     return true;
   }
@@ -122,6 +142,7 @@ class MatterLight {
 
   bool setLightState(bool on) { return setOnOffAttr_(ep_light_, on); }
   bool setSwitchState(bool on) { return setOnOffAttr_(ep_plugin_, on); }
+  bool setNightState(bool on) { return setOnOffAttr_(ep_night_, on); }
 
   bool openCommissioningWindow(uint16_t timeout_seconds = 300) {
     auto err = chip::Server::GetInstance().GetCommissioningWindowManager()
@@ -150,6 +171,7 @@ class MatterLight {
   esp_matter::node_t *node_ = nullptr;
   esp_matter::endpoint_t *ep_light_ = nullptr;
   esp_matter::endpoint_t *ep_plugin_ = nullptr;
+  esp_matter::endpoint_t *ep_night_ = nullptr;
   QueueHandle_t queue_ = nullptr;
 
   bool registerOnOffCbs_(esp_matter::endpoint_t *ep) {
@@ -200,10 +222,12 @@ class MatterLight {
 
     const uint16_t ep_light = esp_matter::endpoint::get_id(self->ep_light_);
     const uint16_t ep_plugin = esp_matter::endpoint::get_id(self->ep_plugin_);
+    const uint16_t ep_night = esp_matter::endpoint::get_id(self->ep_night_);
 
-    bool light_now = false, switch_now = false;
+    bool light_now = false, switch_now = false, night_now = false;
     (void)self->readOnAttr_(self->ep_light_, light_now);
     (void)self->readOnAttr_(self->ep_plugin_, switch_now);
+    (void)self->readOnAttr_(self->ep_night_, night_now);
 
     if (path.mEndpointId == ep_light) {
       if (path.mCommandId == chip::app::Clusters::OnOff::Commands::On::Id)
@@ -221,6 +245,14 @@ class MatterLight {
       else if (path.mCommandId ==
                chip::app::Clusters::OnOff::Commands::Toggle::Id)
         switch_now = !switch_now;
+    } else if (path.mEndpointId == ep_night) {
+      if (path.mCommandId == chip::app::Clusters::OnOff::Commands::On::Id)
+        night_now = true;
+      else if (path.mCommandId == chip::app::Clusters::OnOff::Commands::Off::Id)
+        night_now = false;
+      else if (path.mCommandId ==
+               chip::app::Clusters::OnOff::Commands::Toggle::Id)
+        night_now = !night_now;
     } else {
       return ESP_OK;
     }
@@ -229,9 +261,12 @@ class MatterLight {
     ev.timestamp_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
     ev.type = (path.mEndpointId == ep_light)
                   ? (light_now ? EventType::LightOn : EventType::LightOff)
-                  : (switch_now ? EventType::SwitchOn : EventType::SwitchOff);
+              : (path.mEndpointId == ep_plugin)
+                  ? (switch_now ? EventType::SwitchOn : EventType::SwitchOff)
+                  : (night_now ? EventType::NightOn : EventType::NightOff);
     ev.light_state = light_now;
     ev.switch_state = switch_now;
+    ev.night_state = night_now;
 
     if (self->queue_) {
       if (xQueueSend(self->queue_, &ev, 0) != pdTRUE)
@@ -259,6 +294,8 @@ class MatterLight {
       if (p->ep_light_ && esp_matter::endpoint::get_id(p->ep_light_) == ep)
         return p;
       if (p->ep_plugin_ && esp_matter::endpoint::get_id(p->ep_plugin_) == ep)
+        return p;
+      if (p->ep_night_ && esp_matter::endpoint::get_id(p->ep_night_) == ep)
         return p;
     }
     return nullptr;

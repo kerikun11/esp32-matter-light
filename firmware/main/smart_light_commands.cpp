@@ -49,7 +49,7 @@ void SmartLightCommandHandler::printHelp() const {
   LOGI("- info              : Show device information");
   LOGI("- hostname <name>   : Set device hostname (current: %s)",
        settings_.hostname.c_str());
-  LOGI("- record <on|off>   : Record IR data for Light ON/OFF");
+  LOGI("- record <on|off|night> : Record IR data for Light/Night actions");
   LOGI("- timeout <seconds> : Set light OFF timeout in seconds (current: %d)",
        settings_.light_off_timeout_seconds);
   LOGI("- ambient <on|off>  : Ambient Light Mode (current: %s)",
@@ -74,7 +74,7 @@ bool SmartLightCommandHandler::handleHostname(
 bool SmartLightCommandHandler::handleRecord(
     const std::vector<std::string>& tokens) {
   if (tokens.size() < 2) {
-    LOGE("Usage: record <on|off>");
+    LOGE("Usage: record <on|off|night>");
     return false;
   }
 
@@ -96,8 +96,13 @@ bool SmartLightCommandHandler::handleRecord(
     settings_store_.saveIrDataLightOff(settings_.ir_data_light_off);
     return false;
   }
+  if (tokens[1] == "night") {
+    settings_.ir_data_night = ir_data;
+    settings_store_.saveIrDataNight(settings_.ir_data_night);
+    return false;
+  }
 
-  LOGE("Usage: record <on|off>");
+  LOGE("Usage: record <on|off|night>");
   return false;
 }
 

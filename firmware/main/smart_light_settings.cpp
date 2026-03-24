@@ -26,6 +26,8 @@ SmartLightSettings SmartLightSettingsStore::load() {
                                 settings.ir_data_light_on);
   IRRemote::loadFromPreferences(prefs_, SmartLightSettings::kPrefIrOff,
                                 settings.ir_data_light_off);
+  IRRemote::loadFromPreferences(prefs_, SmartLightSettings::kPrefIrNight,
+                                settings.ir_data_night);
 
   LOGI("[Prefs] hostname: %s", settings.hostname.c_str());
   LOGI("[Prefs] light_off_timeout_seconds: %d",
@@ -36,6 +38,7 @@ SmartLightSettings SmartLightSettingsStore::load() {
        settings.ambient_light_threshold_percent);
   LOGI("[Prefs] IR ON Data size: %zu", settings.ir_data_light_on.size());
   LOGI("[Prefs] IR OFF Data size: %zu", settings.ir_data_light_off.size());
+  LOGI("[Prefs] IR NIGHT Data size: %zu", settings.ir_data_night.size());
   return settings;
 }
 
@@ -62,4 +65,8 @@ void SmartLightSettingsStore::saveIrDataLightOn(const IRRemote::IRData& data) {
 
 void SmartLightSettingsStore::saveIrDataLightOff(const IRRemote::IRData& data) {
   IRRemote::saveToPreferences(prefs_, SmartLightSettings::kPrefIrOff, data);
+}
+
+void SmartLightSettingsStore::saveIrDataNight(const IRRemote::IRData& data) {
+  IRRemote::saveToPreferences(prefs_, SmartLightSettings::kPrefIrNight, data);
 }

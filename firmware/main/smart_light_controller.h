@@ -42,13 +42,21 @@ class SmartLightController {
 
   bool last_light_state_ = false;
   bool last_switch_state_ = false;
+  bool last_night_state_ = false;
   bool last_occupancy_state_ = false;
 
   void setupOta();
+  void syncHostnameIfNeeded_();
+  SmartLightRuntimeState buildRuntimeState_() const;
+  void commitOutputs_(const SmartLightRuntimeState& state);
+  void sendIrSignal_(const IRRemote::IRData& data, const char* label);
   void applyMatterEvents(SmartLightRuntimeState& state);
   void applyIrInput(SmartLightRuntimeState& state);
   void commitSwitchState(const SmartLightRuntimeState& state);
-  void commitLightState(const SmartLightRuntimeState& state);
+  void commitNightState(const SmartLightRuntimeState& state,
+                        bool suppress_off_signal);
+  void commitLightState(const SmartLightRuntimeState& state,
+                        bool suppress_off_signal);
   void updateOccupancyLog(bool occupancy_state);
   void updateStatusLed(const SmartLightRuntimeState& state);
   void handleDecommission();
