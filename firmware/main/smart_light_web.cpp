@@ -180,6 +180,8 @@ void SmartLightWeb::handleAction() {
   if (target == "ambient") {
     settings_.ambient_light_mode_enabled = enabled;
     settings_store_.saveAmbientLightModeEnabled(enabled);
+    showStatus(String("明るさ連動を") +
+               (enabled ? "オン" : "オフ") + "にしました。");
     return redirectRoot(server_);
   }
   if (target == "night_feature") {
