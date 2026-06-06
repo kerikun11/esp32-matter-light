@@ -13,6 +13,7 @@
 
 struct SmartLightSettings {
   static constexpr const char* kPrefPartition = "matter";
+  static constexpr const char* kPrefDeviceName = "device_name";
   static constexpr const char* kPrefHostname = "hostname";
   static constexpr const char* kPrefTimeout = "timeout";
   static constexpr const char* kPrefAmbient = "ambient";
@@ -22,10 +23,12 @@ struct SmartLightSettings {
   static constexpr const char* kPrefIrNight = "ir_night";
   static constexpr const char* kPrefNightFeature = "night_feat";
 
+  static constexpr const char* kDeviceNameDefault = "スマートライト";
   static constexpr const char* kHostnameDefault = "esp32-matter-light";
   static constexpr int kLightOffTimeoutSecondsDefault = 5 * 60;
   static constexpr int kAmbientLightThresholdPercentDefault = 50;
 
+  std::string device_name = kDeviceNameDefault;
   std::string hostname = kHostnameDefault;
   int light_off_timeout_seconds = kLightOffTimeoutSecondsDefault;
   bool ambient_light_mode_enabled = true;
@@ -41,6 +44,7 @@ class SmartLightSettingsStore {
   bool begin();
   SmartLightSettings load();
 
+  void saveDeviceName(const std::string& device_name);
   void saveHostname(const std::string& hostname);
   void saveLightOffTimeoutSeconds(int seconds);
   void saveAmbientLightModeEnabled(bool enabled);

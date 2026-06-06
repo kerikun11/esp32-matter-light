@@ -46,11 +46,8 @@ class SmartLightController {
   bool last_switch_state_ = false;
   bool last_night_state_ = false;
   bool last_occupancy_state_ = false;
-  std::string mdns_delegated_hostname_;
-
   void setupOta();
-  void syncHostnameIfNeeded_();
-  void applyMdnsDelegate_();
+  void syncOtaHostnameIfNeeded_();
   SmartLightRuntimeState buildRuntimeState_() const;
   void commitOutputs_(const SmartLightRuntimeState& state);
   void sendIrSignal_(const IRRemote::IRData& data, const char* label);

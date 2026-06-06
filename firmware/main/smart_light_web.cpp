@@ -123,20 +123,25 @@ void SmartLightWeb::handleRoot() {
 
 void SmartLightWeb::handleSaveSettings() {
   logRequest();
+  String device_name = server_.arg("device_name");
+  device_name.trim();
   const String hostname = server_.arg("hostname");
   const int timeout_seconds = server_.arg("timeout").toInt();
   const int ambient_threshold = server_.arg("ambient_threshold").toInt();
-  if (!hostname.length() || timeout_seconds <= 0 || ambient_threshold < 0 ||
+  if (device_name.isEmpty() || device_name.length() > 64 ||
+      !hostname.length() || timeout_seconds <= 0 || ambient_threshold < 0 ||
       ambient_threshold > 100) {
     showStatus("入力内容を確認してください。設定は保存されませんでした。",
                true);
     return redirectRoot();
   }
 
+  settings_.device_name = device_name.c_str();
   settings_.hostname = hostname.c_str();
   settings_.light_off_timeout_seconds = timeout_seconds;
   settings_.ambient_light_threshold_percent = ambient_threshold;
 
+  settings_store_.saveDeviceName(settings_.device_name);
   settings_store_.saveHostname(settings_.hostname);
   settings_store_.saveLightOffTimeoutSeconds(settings_.light_off_timeout_seconds);
   settings_store_.saveAmbientLightThresholdPercent(
@@ -273,6 +278,8 @@ String SmartLightWeb::buildPage() const {
                        reboot_requested_
                            ? "<div class=\"notice\">再起動しています。数秒待ってからページを再読み込みしてください。</div>"
                            : "");
+  replaceTemplateValue(html, "{{DEVICE_NAME}}",
+                       escapeHtml(settings_.device_name.c_str()));
   replaceTemplateValue(html, "{{HOSTNAME}}",
                        escapeHtml(settings_.hostname.c_str()));
   replaceTemplateValue(html, "{{TIMEOUT}}",

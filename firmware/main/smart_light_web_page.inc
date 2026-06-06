@@ -3,7 +3,7 @@ R"HTML(<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>スマートライト</title>
+  <title>{{DEVICE_NAME}}</title>
   <style>
     :root{--panel:#fff;--line:#dbe3ef;--ink:#17212b;--muted:#64748b;--accent:#2563eb;--good:#15803d;--good-soft:#e8f7ee;--bad:#b42318;--bad-soft:#fdecec;--shadow:0 10px 30px rgba(15,23,42,.08)}
     *{box-sizing:border-box}
@@ -48,7 +48,7 @@ R"HTML(<!doctype html>
   <main>
     {{PREVIEW_NOTICE}}
     <section class="hero">
-      <h1><a href="/" style="color:inherit;text-decoration:none">スマートライト</a></h1>
+      <h1><a href="/" style="color:inherit;text-decoration:none">{{DEVICE_NAME}}</a></h1>
       <div class="topbar">
         <section class="card">
           <div class="control-grid">
@@ -98,10 +98,15 @@ R"HTML(<!doctype html>
               <p class="section-description">以下の項目は、画面下の「設定を保存」でまとめて反映されます。</p>
             </div>
             <div class="settings-grid">
+              <label class="field setting-card wide">
+                <span>デバイス名</span>
+                <input name="device_name" type="text" maxlength="64" required value="{{DEVICE_NAME}}">
+                <span class="mini">タイトルとブラウザのタブに表示されます。</span>
+              </label>
               <label class="field setting-card">
-                <span>ホスト名</span>
+                <span>OTAホスト名</span>
                 <input name="hostname" value="{{HOSTNAME}}">
-                <span class="mini">http://&lt;ホスト名&gt;.local/ でこの画面にアクセスできます。</span>
+                <span class="mini">Arduino OTAで使用する識別名です。Matterが管理するmDNS名は変更しません。</span>
               </label>
               <label class="field setting-card">
                 <span>自動消灯時間（秒）</span>
@@ -118,7 +123,7 @@ R"HTML(<!doctype html>
               </div>
             </div>
             <div class="row save-row">
-              <p class="mini">ホスト名、自動消灯時間、明るさ連動の閾値をまとめて保存します。</p>
+              <p class="mini">デバイス名、OTAホスト名、自動消灯時間、明るさ連動の閾値をまとめて保存します。</p>
               <button>設定を保存</button>
             </div>
           </form>

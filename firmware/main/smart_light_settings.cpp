@@ -11,6 +11,10 @@ bool SmartLightSettingsStore::begin() {
 
 SmartLightSettings SmartLightSettingsStore::load() {
   SmartLightSettings settings;
+  settings.device_name =
+      prefs_.getString(SmartLightSettings::kPrefDeviceName,
+                       SmartLightSettings::kDeviceNameDefault)
+          .c_str();
   settings.hostname = prefs_.getString(SmartLightSettings::kPrefHostname,
                                        SmartLightSettings::kHostnameDefault)
                           .c_str();
@@ -31,6 +35,7 @@ SmartLightSettings SmartLightSettingsStore::load() {
   IRRemote::loadFromPreferences(prefs_, SmartLightSettings::kPrefIrNight,
                                 settings.ir_data_night);
 
+  LOGI("[Prefs] device_name: %s", settings.device_name.c_str());
   LOGI("[Prefs] hostname: %s", settings.hostname.c_str());
   LOGI("[Prefs] light_off_timeout_seconds: %d",
        settings.light_off_timeout_seconds);
@@ -44,6 +49,10 @@ SmartLightSettings SmartLightSettingsStore::load() {
   LOGI("[Prefs] IR OFF Data size: %zu", settings.ir_data_light_off.size());
   LOGI("[Prefs] IR NIGHT Data size: %zu", settings.ir_data_night.size());
   return settings;
+}
+
+void SmartLightSettingsStore::saveDeviceName(const std::string& device_name) {
+  prefs_.putString(SmartLightSettings::kPrefDeviceName, device_name.c_str());
 }
 
 void SmartLightSettingsStore::saveHostname(const std::string& hostname) {

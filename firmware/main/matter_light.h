@@ -5,20 +5,17 @@
 #pragma once
 
 #include <app-common/zap-generated/ids/Clusters.h>
-#include <app/ConcreteCommandPath.h>
 #include <app/server/Server.h>
 #include <esp_log.h>
 #include <esp_matter.h>
 #include <esp_matter_attribute.h>
 #include <esp_matter_cluster.h>
-#include <esp_matter_command.h>
 #include <esp_matter_core.h>
 #include <esp_matter_endpoint.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <inttypes.h>
-#include <lib/core/TLV.h>
 #include <platform/ConfigurationManager.h>
 #include <system/SystemClock.h>
 
@@ -49,7 +46,8 @@ class MatterLight {
   bool begin(bool initial_light_on, bool initial_switch_on,
              bool initial_night_on = false, bool enable_night_endpoint = true) {
     esp_matter::node::config_t node_cfg{};
-    node_ = esp_matter::node::create(&node_cfg, nullptr, nullptr, this);
+    node_ = esp_matter::node::create(&node_cfg, &MatterLight::attrCb_, nullptr,
+                                     this);
     if (!node_) {
       ESP_LOGE(TAG, "node::create failed");
       return false;
@@ -61,8 +59,7 @@ class MatterLight {
       cfg.on_off.on_off = initial_light_on;
       ep_light_ =
           esp_matter::endpoint::on_off_light::create(node_, &cfg, 0, this);
-      if (!ep_light_ || !registerOnOffCbs_(ep_light_) ||
-          !setOnOffAttr_(ep_light_, initial_light_on)) {
+      if (!ep_light_ || !setOnOffAttr_(ep_light_, initial_light_on)) {
         ESP_LOGE(TAG, "light::create failed");
         return false;
       }
@@ -74,8 +71,7 @@ class MatterLight {
       cfg.on_off.on_off = initial_switch_on;
       ep_plugin_ = esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg,
                                                                     0, this);
-      if (!ep_plugin_ || !registerOnOffCbs_(ep_plugin_) ||
-          !setOnOffAttr_(ep_plugin_, initial_switch_on)) {
+      if (!ep_plugin_ || !setOnOffAttr_(ep_plugin_, initial_switch_on)) {
         ESP_LOGE(TAG, "plugin::create failed");
         return false;
       }
@@ -87,8 +83,7 @@ class MatterLight {
       cfg.on_off.on_off = initial_night_on;
       ep_night_ =
           esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg, 0, this);
-      if (!ep_night_ || !registerOnOffCbs_(ep_night_) ||
-          !setOnOffAttr_(ep_night_, initial_night_on)) {
+      if (!ep_night_ || !setOnOffAttr_(ep_night_, initial_night_on)) {
         ESP_LOGE(TAG, "night::create failed");
         return false;
       }
@@ -183,19 +178,6 @@ class MatterLight {
   esp_matter::endpoint_t *ep_night_ = nullptr;
   QueueHandle_t queue_ = nullptr;
 
-  bool registerOnOffCbs_(esp_matter::endpoint_t *ep) {
-    auto *onoff = esp_matter::cluster::get(ep, chip::app::Clusters::OnOff::Id);
-    if (!onoff) return false;
-    auto *c_on = esp_matter::cluster::on_off::command::create_on(onoff);
-    auto *c_off = esp_matter::cluster::on_off::command::create_off(onoff);
-    auto *c_toggle = esp_matter::cluster::on_off::command::create_toggle(onoff);
-    if (!c_on || !c_off || !c_toggle) return false;
-    esp_matter::command::set_user_callback(c_on, &MatterLight::cmdCb_);
-    esp_matter::command::set_user_callback(c_off, &MatterLight::cmdCb_);
-    esp_matter::command::set_user_callback(c_toggle, &MatterLight::cmdCb_);
-    return true;
-  }
-
   bool setOnOffAttr_(esp_matter::endpoint_t *ep, bool on) {
     if (!ep) return false;
     auto *cluster =
@@ -223,62 +205,57 @@ class MatterLight {
     return true;
   }
 
-  static esp_err_t cmdCb_(const chip::app::ConcreteCommandPath &path,
-                          chip::TLV::TLVReader &, void *) {
-    MatterLight *self = findOwnerByEndpoint_(path.mEndpointId);
-    if (!self || path.mClusterId != chip::app::Clusters::OnOff::Id)
+  static esp_err_t attrCb_(esp_matter::attribute::callback_type_t type,
+                           uint16_t endpoint_id, uint32_t cluster_id,
+                           uint32_t attribute_id, esp_matter_attr_val_t *val,
+                           void *) {
+    if (type != esp_matter::attribute::POST_UPDATE ||
+        cluster_id != chip::app::Clusters::OnOff::Id ||
+        attribute_id !=
+            chip::app::Clusters::OnOff::Attributes::OnOff::Id ||
+        !val) {
       return ESP_OK;
+    }
+
+    MatterLight *self = findOwnerByEndpoint_(endpoint_id);
+    if (!self) return ESP_OK;
 
     const uint16_t ep_light = esp_matter::endpoint::get_id(self->ep_light_);
     const uint16_t ep_plugin = esp_matter::endpoint::get_id(self->ep_plugin_);
     const uint16_t ep_night = self->ep_night_
                                   ? esp_matter::endpoint::get_id(self->ep_night_)
                                   : 0xFFFF;
+    if (endpoint_id != ep_light && endpoint_id != ep_plugin &&
+        endpoint_id != ep_night) {
+      return ESP_OK;
+    }
 
     bool light_now = false, switch_now = false, night_now = false;
     (void)self->readOnAttr_(self->ep_light_, light_now);
     (void)self->readOnAttr_(self->ep_plugin_, switch_now);
     (void)self->readOnAttr_(self->ep_night_, night_now);
-
-    if (path.mEndpointId == ep_light) {
-      if (path.mCommandId == chip::app::Clusters::OnOff::Commands::On::Id)
-        light_now = true;
-      else if (path.mCommandId == chip::app::Clusters::OnOff::Commands::Off::Id)
-        light_now = false;
-      else if (path.mCommandId ==
-               chip::app::Clusters::OnOff::Commands::Toggle::Id)
-        light_now = !light_now;
-    } else if (path.mEndpointId == ep_plugin) {
-      if (path.mCommandId == chip::app::Clusters::OnOff::Commands::On::Id)
-        switch_now = true;
-      else if (path.mCommandId == chip::app::Clusters::OnOff::Commands::Off::Id)
-        switch_now = false;
-      else if (path.mCommandId ==
-               chip::app::Clusters::OnOff::Commands::Toggle::Id)
-        switch_now = !switch_now;
-    } else if (path.mEndpointId == ep_night) {
-      if (path.mCommandId == chip::app::Clusters::OnOff::Commands::On::Id)
-        night_now = true;
-      else if (path.mCommandId == chip::app::Clusters::OnOff::Commands::Off::Id)
-        night_now = false;
-      else if (path.mCommandId ==
-               chip::app::Clusters::OnOff::Commands::Toggle::Id)
-        night_now = !night_now;
+    const bool updated_state = val->val.b;
+    if (endpoint_id == ep_light) {
+      light_now = updated_state;
+    } else if (endpoint_id == ep_plugin) {
+      switch_now = updated_state;
     } else {
-      return ESP_OK;
+      night_now = updated_state;
     }
 
     Event ev{};
     ev.timestamp_ms = (uint64_t)(esp_timer_get_time() / 1000ULL);
-    ev.type = (path.mEndpointId == ep_light)
+    ev.type = (endpoint_id == ep_light)
                   ? (light_now ? EventType::LightOn : EventType::LightOff)
-              : (path.mEndpointId == ep_plugin)
+              : (endpoint_id == ep_plugin)
                   ? (switch_now ? EventType::SwitchOn : EventType::SwitchOff)
                   : (night_now ? EventType::NightOn : EventType::NightOff);
     ev.light_state = light_now;
     ev.switch_state = switch_now;
     ev.night_state = night_now;
 
+    ESP_LOGI(TAG, "OnOff update ep=0x%04x state=%s", endpoint_id,
+             updated_state ? "ON" : "OFF");
     if (self->queue_) {
       if (xQueueSend(self->queue_, &ev, 0) != pdTRUE)
         ESP_LOGE(TAG, "xQueueSend failed");
