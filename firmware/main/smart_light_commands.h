@@ -40,4 +40,5 @@ class SmartLightCommandHandler {
   bool handleRecord(const std::vector<std::string>& tokens);
   bool handleTimeout(const std::vector<std::string>& tokens);
   bool handleAmbient(const std::vector<std::string>& tokens);
+  bool handleNightlight(const std::vector<std::string>& tokens);
 };

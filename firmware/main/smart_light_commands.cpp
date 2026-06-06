@@ -39,6 +39,9 @@ bool SmartLightCommandHandler::handle() {
   if (cmd == "ambient" || cmd == "a") {
     return handleAmbient(tokens);
   }
+  if (cmd == "nightlight" || cmd == "nl") {
+    return handleNightlight(tokens);
+  }
   return false;
 }
 
@@ -54,6 +57,8 @@ void SmartLightCommandHandler::printHelp() const {
        settings_.light_off_timeout_seconds);
   LOGI("- ambient <on|off>  : Ambient Light Mode (current: %s)",
        settings_.ambient_light_mode_enabled ? "on" : "off");
+  LOGI("- nightlight <on|off> : Night Light Endpoint (current: %s, reboot required)",
+       settings_.night_light_feature_enabled ? "on" : "off");
 }
 
 void SmartLightCommandHandler::handleInfo() const {
@@ -142,5 +147,29 @@ bool SmartLightCommandHandler::handleAmbient(
 
   settings_store_.saveAmbientLightModeEnabled(
       settings_.ambient_light_mode_enabled);
+  return false;
+}
+
+bool SmartLightCommandHandler::handleNightlight(
+    const std::vector<std::string>& tokens) {
+  if (tokens.size() < 2) {
+    LOGE("Usage: nightlight <on|off>");
+    return false;
+  }
+
+  if (tokens[1] == "on") {
+    settings_.night_light_feature_enabled = true;
+  } else if (tokens[1] == "off") {
+    settings_.night_light_feature_enabled = false;
+  } else {
+    LOGE("Usage: nightlight <on|off>");
+    return false;
+  }
+
+  settings_store_.saveNightLightFeatureEnabled(
+      settings_.night_light_feature_enabled);
+  LOGI("[NightLight] %s -> rebooting...",
+       settings_.night_light_feature_enabled ? "on" : "off");
+  ESP.restart();
   return false;
 }

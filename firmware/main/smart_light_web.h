@@ -29,6 +29,7 @@ class SmartLightWeb {
   bool consumeRequestedLightState(bool& light_state);
   bool consumeRequestedSwitchState(bool& switch_state);
   bool consumeRequestedNightState(bool& night_state);
+  bool consumeRebootRequested();
 
  private:
   SmartLightSettings& settings_;
@@ -46,7 +47,9 @@ class SmartLightWeb {
   bool requested_switch_state_ = false;
   bool requested_night_state_pending_ = false;
   bool requested_night_state_ = false;
+  bool reboot_requested_ = false;
 
+  void logRequest();
   void handleRoot();
   void handleSaveSettings();
   void handleRecord();

@@ -5,6 +5,10 @@
 
 #include "smart_light_controller.h"
 
+#include <esp_netif.h>
+#include <esp_wifi.h>
+#include <mdns.h>
+
 #include "app_log.h"
 
 SmartLightController::SmartLightController()
@@ -20,7 +24,7 @@ void SmartLightController::begin() {
 
   ir_remote_.begin(CONFIG_APP_PIN_IR_TRANSMITTER, CONFIG_APP_PIN_IR_RECEIVER);
 
-  matter_light_.begin(true, true, false);
+  matter_light_.begin(true, true, false, settings_.night_light_feature_enabled);
   last_light_state_ = false;
   last_switch_state_ = true;
   last_night_state_ = false;
@@ -41,7 +45,11 @@ void SmartLightController::handle() {
       last_light_state_, last_switch_state_, last_night_state_,
       static_cast<int>(brightness_sensor_.getNormalized() * 100.0f + 0.5f));
   web_.handle();
+  if (web_.consumeRebootRequested()) {
+    ESP.restart();
+  }
   syncHostnameIfNeeded_();
+  applyMdnsDelegate_();
 
   SmartLightRuntimeState state = buildRuntimeState_();
   const SmartLightRuntimeState previous_state = state;
@@ -61,7 +69,10 @@ void SmartLightController::handle() {
 void SmartLightController::setupOta() {
   ArduinoOTA.setHostname(settings_.hostname.c_str());
   ArduinoOTA.setMdnsEnabled(false);
+  ArduinoOTA.setTimeout(10000);  // 10s per chunk × 3 retries = 30s max stall
   ArduinoOTA.onStart([]() {
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    esp_wifi_set_max_tx_power(78);  // 78 * 0.25 = 19.5 dBm
     auto cmd = ArduinoOTA.getCommand();
     LOGI("[OTA] Start updating %s",
          cmd == U_FLASH ? "sketch"
@@ -76,13 +87,39 @@ void SmartLightController::setupOta() {
   ArduinoOTA.begin();
 }
 
+void SmartLightController::applyMdnsDelegate_() {
+  if (mdns_delegated_hostname_ == settings_.hostname) return;
+
+  esp_netif_t* sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+  if (!sta) return;
+  esp_netif_ip_info_t ip_info{};
+  if (esp_netif_get_ip_info(sta, &ip_info) != ESP_OK || ip_info.ip.addr == 0)
+    return;
+  if (mdns_init() != ESP_OK) return;
+  mdns_netif_action(sta, static_cast<mdns_event_actions_t>(
+                            MDNS_EVENT_ENABLE_IP4 | MDNS_EVENT_ANNOUNCE_IP4));
+
+  esp_err_t err = mdns_hostname_set(settings_.hostname.c_str());
+  if (err == ESP_OK) {
+    mdns_delegated_hostname_ = settings_.hostname;
+    LOGI("[mDNS] %s.local -> " IPSTR, settings_.hostname.c_str(),
+         IP2STR(&ip_info.ip));
+  } else if (err != ESP_ERR_INVALID_ARG) {
+    // INVALID_ARG = mDNS not yet initialized, retry silently
+    LOGW("[mDNS] hostname_set: %s", esp_err_to_name(err));
+    mdns_delegated_hostname_ = settings_.hostname;
+  }
+}
+
 void SmartLightController::syncHostnameIfNeeded_() {
   if (command_handler_.handle()) {
     ArduinoOTA.setHostname(settings_.hostname.c_str());
+    mdns_delegated_hostname_ = "";  // force re-apply on next handle()
   }
   if (!web_.hostnameUpdated()) return;
 
   ArduinoOTA.setHostname(settings_.hostname.c_str());
+  mdns_delegated_hostname_ = "";
   web_.clearHostnameUpdated();
 }
 

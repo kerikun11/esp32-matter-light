@@ -22,6 +22,8 @@ SmartLightSettings SmartLightSettingsStore::load() {
   settings.ambient_light_threshold_percent =
       prefs_.getInt(SmartLightSettings::kPrefAmbientThreshold,
                     SmartLightSettings::kAmbientLightThresholdPercentDefault);
+  settings.night_light_feature_enabled =
+      prefs_.getBool(SmartLightSettings::kPrefNightFeature, true);
   IRRemote::loadFromPreferences(prefs_, SmartLightSettings::kPrefIrOn,
                                 settings.ir_data_light_on);
   IRRemote::loadFromPreferences(prefs_, SmartLightSettings::kPrefIrOff,
@@ -36,6 +38,8 @@ SmartLightSettings SmartLightSettingsStore::load() {
        settings.ambient_light_mode_enabled);
   LOGI("[Prefs] ambient_light_threshold_percent: %d",
        settings.ambient_light_threshold_percent);
+  LOGI("[Prefs] night_light_feature_enabled: %d",
+       settings.night_light_feature_enabled);
   LOGI("[Prefs] IR ON Data size: %zu", settings.ir_data_light_on.size());
   LOGI("[Prefs] IR OFF Data size: %zu", settings.ir_data_light_off.size());
   LOGI("[Prefs] IR NIGHT Data size: %zu", settings.ir_data_night.size());
@@ -57,6 +61,10 @@ void SmartLightSettingsStore::saveAmbientLightModeEnabled(bool enabled) {
 void SmartLightSettingsStore::saveAmbientLightThresholdPercent(
     int threshold_percent) {
   prefs_.putInt(SmartLightSettings::kPrefAmbientThreshold, threshold_percent);
+}
+
+void SmartLightSettingsStore::saveNightLightFeatureEnabled(bool enabled) {
+  prefs_.putBool(SmartLightSettings::kPrefNightFeature, enabled);
 }
 
 void SmartLightSettingsStore::saveIrDataLightOn(const IRRemote::IRData& data) {

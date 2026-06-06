@@ -47,7 +47,7 @@ class MatterLight {
       "qrcode.html?data=MT:Y.K9042C00KA0648G00";
 
   bool begin(bool initial_light_on, bool initial_switch_on,
-             bool initial_night_on = false) {
+             bool initial_night_on = false, bool enable_night_endpoint = true) {
     esp_matter::node::config_t node_cfg{};
     node_ = esp_matter::node::create(&node_cfg, nullptr, nullptr, this);
     if (!node_) {
@@ -81,8 +81,8 @@ class MatterLight {
       }
     }
 
-    // Plugin endpoint (night)
-    {
+    // Plugin endpoint (night) - only when feature is enabled
+    if (enable_night_endpoint) {
       esp_matter::endpoint::on_off_plugin_unit::config_t cfg{};
       cfg.on_off.on_off = initial_night_on;
       ep_night_ =
@@ -110,14 +110,23 @@ class MatterLight {
       return false;
     }
 
-    ESP_LOGI(TAG,
-             "light_ep=0x%04x(%s) plugin_ep=0x%04x(%s) night_ep=0x%04x(%s)",
-             esp_matter::endpoint::get_id(ep_light_),
-             initial_light_on ? "ON" : "OFF",
-             esp_matter::endpoint::get_id(ep_plugin_),
-             initial_switch_on ? "ON" : "OFF",
-             esp_matter::endpoint::get_id(ep_night_),
-             initial_night_on ? "ON" : "OFF");
+    if (ep_night_) {
+      ESP_LOGI(TAG,
+               "light_ep=0x%04x(%s) plugin_ep=0x%04x(%s) night_ep=0x%04x(%s)",
+               esp_matter::endpoint::get_id(ep_light_),
+               initial_light_on ? "ON" : "OFF",
+               esp_matter::endpoint::get_id(ep_plugin_),
+               initial_switch_on ? "ON" : "OFF",
+               esp_matter::endpoint::get_id(ep_night_),
+               initial_night_on ? "ON" : "OFF");
+    } else {
+      ESP_LOGI(TAG,
+               "light_ep=0x%04x(%s) plugin_ep=0x%04x(%s) night_ep=disabled",
+               esp_matter::endpoint::get_id(ep_light_),
+               initial_light_on ? "ON" : "OFF",
+               esp_matter::endpoint::get_id(ep_plugin_),
+               initial_switch_on ? "ON" : "OFF");
+    }
     printOnboarding();
     return true;
   }
@@ -222,7 +231,9 @@ class MatterLight {
 
     const uint16_t ep_light = esp_matter::endpoint::get_id(self->ep_light_);
     const uint16_t ep_plugin = esp_matter::endpoint::get_id(self->ep_plugin_);
-    const uint16_t ep_night = esp_matter::endpoint::get_id(self->ep_night_);
+    const uint16_t ep_night = self->ep_night_
+                                  ? esp_matter::endpoint::get_id(self->ep_night_)
+                                  : 0xFFFF;
 
     bool light_now = false, switch_now = false, night_now = false;
     (void)self->readOnAttr_(self->ep_light_, light_now);
