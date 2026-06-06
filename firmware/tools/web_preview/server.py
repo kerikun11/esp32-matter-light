@@ -15,6 +15,7 @@ STATE_LOCK = Lock()
 
 @dataclass
 class PreviewState:
+    device_name: str = "スマートライト"
     hostname: str = "smart-light"
     timeout: int = 60
     ambient_threshold: int = 30
@@ -94,6 +95,7 @@ def render() -> bytes:
         state.night_feature_enabled, "有効", "無効"
     )
     values = {
+        "{{DEVICE_NAME}}": escape(state.device_name, quote=True),
         "{{PREVIEW_NOTICE}}": (
             '<div class="notice" style="margin-top:0;margin-bottom:14px;'
             'border-color:#93c5fd;background:#eff6ff;color:#1e40af">'
@@ -236,6 +238,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         self.redirect_root()
 
     def handle_settings(self, form):
+        device_name = form.get("device_name", [""])[0].strip()
         hostname = form.get("hostname", [""])[0].strip()
         try:
             timeout = int(form.get("timeout", ["0"])[0])
@@ -244,12 +247,19 @@ class PreviewHandler(BaseHTTPRequestHandler):
             timeout = 0
             threshold = -1
 
-        if not hostname or timeout <= 0 or not 0 <= threshold <= 100:
+        if (
+            not device_name
+            or len(device_name.encode("utf-8")) > 64
+            or not hostname
+            or timeout <= 0
+            or not 0 <= threshold <= 100
+        ):
             set_status(
                 "入力内容を確認してください。設定は保存されませんでした。", True
             )
             return
 
+        STATE.device_name = device_name
         STATE.hostname = hostname
         STATE.timeout = timeout
         STATE.ambient_threshold = threshold
