@@ -50,7 +50,7 @@ void SmartLightCommandHandler::printHelp() const {
   LOGI("- help              : Show this help");
   LOGI("- reboot            : Reboot the device");
   LOGI("- info              : Show device information");
-  LOGI("- hostname <name>   : Set Arduino OTA hostname (current: %s)",
+  LOGI("- hostname <name>   : Set hostname (current: %s)",
        settings_.hostname.c_str());
   LOGI("- record <on|off|night> : Record IR data for Light/Night actions");
   LOGI("- timeout <seconds> : Set light OFF timeout in seconds (current: %d)",

@@ -103,9 +103,9 @@ R"HTML(<!doctype html>
                 <span class="mini">タイトルとブラウザのタブに表示されます。</span>
               </label>
               <label class="field setting-card">
-                <span>OTAホスト名</span>
+                <span>ホスト名</span>
                 <input name="hostname" value="{{HOSTNAME}}">
-                <span class="mini">Arduino OTAで使用する識別名です。Matterが管理するmDNS名は変更しません。</span>
+                <span class="mini">この画面は<strong>http://&lt;ホスト名&gt;.local</strong>でアクセスできます。</span>
               </label>
               <label class="field setting-card">
                 <span>自動消灯時間（秒）</span>
@@ -122,7 +122,7 @@ R"HTML(<!doctype html>
               </div>
             </div>
             <div class="row save-row">
-              <p class="mini">デバイス名、OTAホスト名、自動消灯時間、明るさ連動の閾値をまとめて保存します。</p>
+              <p class="mini">デバイス名、ホスト名、自動消灯時間、明るさ連動の閾値をまとめて保存します。</p>
               <button>設定を保存</button>
             </div>
           </form>

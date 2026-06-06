@@ -94,7 +94,8 @@ void SmartLightWeb::handleSaveSettings() {
   logRequest(server_);
   String device_name = server_.arg("device_name");
   device_name.trim();
-  const String hostname = server_.arg("hostname");
+  String hostname = server_.arg("hostname");
+  hostname.trim();
   const int timeout_seconds = server_.arg("timeout").toInt();
   const int ambient_threshold = server_.arg("ambient_threshold").toInt();
   if (device_name.isEmpty() || device_name.length() > 64 ||

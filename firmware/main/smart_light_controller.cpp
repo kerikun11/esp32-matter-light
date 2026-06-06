@@ -5,7 +5,9 @@
 
 #include "smart_light_controller.h"
 
+#include <esp_netif.h>
 #include <esp_wifi.h>
+#include <mdns.h>
 
 #include "app_log.h"
 #include "ota_utils.h"
@@ -50,7 +52,7 @@ void SmartLightController::handle() {
   if (web_.consumeRebootRequested()) {
     ESP.restart();
   }
-  syncOtaHostnameIfNeeded_();
+  syncHostnames_();
 
   SmartLightRuntimeState state = buildRuntimeState_();
   const SmartLightRuntimeState previous_state = state;
@@ -102,14 +104,89 @@ void SmartLightController::setupOta() {
   ArduinoOTA.begin();
 }
 
-void SmartLightController::syncOtaHostnameIfNeeded_() {
-  if (command_handler_.handle()) {
-    ArduinoOTA.setHostname(settings_.hostname.c_str());
+void SmartLightController::syncHostnames_() {
+  bool hostname_updated = command_handler_.handle();
+  if (web_.hostnameUpdated()) {
+    hostname_updated = true;
+    web_.clearHostnameUpdated();
   }
-  if (!web_.hostnameUpdated()) return;
 
-  ArduinoOTA.setHostname(settings_.hostname.c_str());
-  web_.clearHostnameUpdated();
+  if (hostname_updated) {
+    ArduinoOTA.setHostname(settings_.hostname.c_str());
+    syncAdditionalMdnsHostname_(true);
+  } else {
+    syncAdditionalMdnsHostname_(false);
+  }
+}
+
+void SmartLightController::syncAdditionalMdnsHostname_(bool force) {
+  constexpr unsigned long kRetryIntervalMs = 1000;
+  const unsigned long now = millis();
+  if (!force && now - last_mdns_sync_attempt_ms_ < kRetryIntervalMs) return;
+  last_mdns_sync_attempt_ms_ = now;
+
+  esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+  esp_netif_ip_info_t ip_info{};
+  if (!netif || esp_netif_get_ip_info(netif, &ip_info) != ESP_OK ||
+      ip_info.ip.addr == 0) {
+    return;
+  }
+
+  if (!mdns_hostname_.empty() && mdns_hostname_ != settings_.hostname) {
+    const esp_err_t err = mdns_delegate_hostname_remove(mdns_hostname_.c_str());
+    if (err != ESP_OK) {
+      LOGW("[mDNS] Failed to remove %s.local: %s", mdns_hostname_.c_str(),
+           esp_err_to_name(err));
+      return;
+    }
+    LOGI("[mDNS] Removed additional hostname: %s.local",
+         mdns_hostname_.c_str());
+    mdns_hostname_.clear();
+    mdns_ipv4_address_ = 0;
+  }
+
+  mdns_ip_addr_t address{};
+  address.addr.type = ESP_IPADDR_TYPE_V4;
+  address.addr.u_addr.ip4 = ip_info.ip;
+
+  if (mdns_hostname_.empty()) {
+    const esp_err_t err =
+        mdns_delegate_hostname_add(settings_.hostname.c_str(), &address);
+    if (err != ESP_OK) {
+      if (err != last_mdns_error_) {
+        LOGW("[mDNS] Failed to add %s.local: %s", settings_.hostname.c_str(),
+             esp_err_to_name(err));
+      }
+      last_mdns_error_ = err;
+      return;
+    }
+    last_mdns_error_ = ESP_OK;
+    if (!mdns_hostname_exists(settings_.hostname.c_str())) {
+      char primary_hostname[MDNS_NAME_BUF_LEN] = {};
+      const esp_err_t get_err = mdns_hostname_get(primary_hostname);
+      LOGW("[mDNS] %s.local was not added (primary: %s)",
+           settings_.hostname.c_str(),
+           get_err == ESP_OK ? primary_hostname : "unavailable");
+      return;
+    }
+    mdns_hostname_ = settings_.hostname;
+    mdns_ipv4_address_ = ip_info.ip.addr;
+    LOGI("[mDNS] Added additional hostname: %s.local -> " IPSTR,
+         mdns_hostname_.c_str(), IP2STR(&ip_info.ip));
+    return;
+  }
+
+  if (mdns_ipv4_address_ == ip_info.ip.addr) return;
+  const esp_err_t err =
+      mdns_delegate_hostname_set_address(mdns_hostname_.c_str(), &address);
+  if (err != ESP_OK) {
+    LOGW("[mDNS] Failed to update %s.local: %s", mdns_hostname_.c_str(),
+         esp_err_to_name(err));
+    return;
+  }
+  mdns_ipv4_address_ = ip_info.ip.addr;
+  LOGI("[mDNS] Updated address: %s.local -> " IPSTR, mdns_hostname_.c_str(),
+       IP2STR(&ip_info.ip));
 }
 
 SmartLightRuntimeState SmartLightController::buildRuntimeState_() const {
