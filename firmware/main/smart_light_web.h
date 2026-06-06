@@ -69,12 +69,10 @@ class SmartLightWeb {
   String status_message_;
   bool status_is_error_ = false;
 
-  void logRequest();
   void handleRoot();
   void handleSaveSettings();
   void handleRecord();
   void handleAction();
-  void redirectRoot();
   void sendPage();
   String buildPage() const;
 };

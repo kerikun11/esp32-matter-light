@@ -12,7 +12,7 @@
 #include "ir_remote.h"
 
 struct SmartLightSettings {
-  static constexpr const char* kPrefPartition = "matter";
+  static constexpr const char* kPrefNamespace = "matter";
   static constexpr const char* kPrefDeviceName = "device_name";
   static constexpr const char* kPrefHostname = "hostname";
   static constexpr const char* kPrefTimeout = "timeout";

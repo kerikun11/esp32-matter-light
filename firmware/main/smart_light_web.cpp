@@ -5,7 +5,7 @@
 
 #include "smart_light_web.h"
 
-#include "app_log.h"
+#include "web_utils.h"
 
 namespace {
 
@@ -14,12 +14,7 @@ constexpr char kWebPageTemplate[] =
     ;
 
 constexpr uint16_t kIrRecordTimeoutMs = 10000;
-constexpr uint16_t kIrRecordIndicatorMs = kIrRecordTimeoutMs + 1000;
 constexpr uint16_t kIrResultIndicatorMs = 500;
-
-void replaceTemplateValue(String& html, const char* key, const String& value) {
-  html.replace(key, value);
-}
 
 void replaceToggleValues(String& html, const char* action_key,
                          const char* class_key, const char* state_key,
@@ -28,16 +23,6 @@ void replaceToggleValues(String& html, const char* action_key,
   replaceTemplateValue(html, action_key, enabled ? "off" : "on");
   replaceTemplateValue(html, class_key, enabled ? "on" : "off");
   replaceTemplateValue(html, state_key, enabled ? on_text : off_text);
-}
-
-String escapeHtml(const char* value) {
-  String escaped(value);
-  escaped.replace("&", "&amp;");
-  escaped.replace("\"", "&quot;");
-  escaped.replace("<", "&lt;");
-  escaped.replace(">", "&gt;");
-  escaped.replace("'", "&#39;");
-  return escaped;
 }
 
 String buildNightControl(bool enabled) {
@@ -95,34 +80,18 @@ bool SmartLightWeb::consumeRebootRequested() {
   return true;
 }
 
-void SmartLightWeb::logRequest() {
-  const char* method = server_.method() == HTTP_GET ? "GET" : "POST";
-  if (server_.args() == 0) {
-    LOGI("[Web] %s %s", method, server_.uri().c_str());
-    return;
-  }
-  String args;
-  for (int i = 0; i < server_.args(); i++) {
-    if (i > 0) args += ' ';
-    args += server_.argName(i);
-    args += '=';
-    args += server_.arg(i);
-  }
-  LOGI("[Web] %s %s %s", method, server_.uri().c_str(), args.c_str());
-}
-
 void SmartLightWeb::showStatus(const String& message, bool is_error) {
   status_message_ = message;
   status_is_error_ = is_error;
 }
 
 void SmartLightWeb::handleRoot() {
-  logRequest();
+  logRequest(server_);
   sendPage();
 }
 
 void SmartLightWeb::handleSaveSettings() {
-  logRequest();
+  logRequest(server_);
   String device_name = server_.arg("device_name");
   device_name.trim();
   const String hostname = server_.arg("hostname");
@@ -133,7 +102,7 @@ void SmartLightWeb::handleSaveSettings() {
       ambient_threshold > 100) {
     showStatus("入力内容を確認してください。設定は保存されませんでした。",
                true);
-    return redirectRoot();
+    return redirectRoot(server_);
   }
 
   settings_.device_name = device_name.c_str();
@@ -148,24 +117,24 @@ void SmartLightWeb::handleSaveSettings() {
       settings_.ambient_light_threshold_percent);
   hostname_updated_ = true;
   showStatus("基本設定を保存しました。");
-  redirectRoot();
+  redirectRoot(server_);
 }
 
 void SmartLightWeb::handleRecord() {
-  logRequest();
+  logRequest(server_);
   const String target = server_.arg("target");
   if (target != "on" && target != "off" && target != "night") {
     showStatus("赤外線リモコンの記録対象が不正です。", true);
-    return redirectRoot();
+    return redirectRoot(server_);
   }
 
   ir_remote_.clear();
-  led_.blinkOnce(RgbLed::Color::Yellow, kIrRecordIndicatorMs);
+  led_.blinkOnce(RgbLed::Color::Green, kIrRecordTimeoutMs + 1000);
   if (!ir_remote_.waitForAvailable(kIrRecordTimeoutMs)) {
     led_.blinkOnce(RgbLed::Color::Red, kIrResultIndicatorMs);
     showStatus("赤外線信号を受信できませんでした。もう一度お試しください。",
                true);
-    return redirectRoot();
+    return redirectRoot(server_);
   }
 
   const auto ir_data = ir_remote_.get();
@@ -185,32 +154,32 @@ void SmartLightWeb::handleRecord() {
   }
   led_.blinkOnce(RgbLed::Color::Green, kIrResultIndicatorMs);
   showStatus(recorded_button + "ボタンの赤外線信号を記録しました。");
-  redirectRoot();
+  redirectRoot(server_);
 }
 
 void SmartLightWeb::handleAction() {
-  logRequest();
+  logRequest(server_);
   const String target = server_.arg("target");
   const String state = server_.arg("state");
   const bool enabled = state == "on";
-  if (state != "on" && state != "off") return redirectRoot();
+  if (state != "on" && state != "off") return redirectRoot(server_);
 
   if (target == "light") {
     requested_light_state_.request(enabled);
-    return redirectRoot();
+    return redirectRoot(server_);
   }
   if (target == "switch") {
     requested_switch_state_.request(enabled);
-    return redirectRoot();
+    return redirectRoot(server_);
   }
   if (target == "night") {
     requested_night_state_.request(enabled);
-    return redirectRoot();
+    return redirectRoot(server_);
   }
   if (target == "ambient") {
     settings_.ambient_light_mode_enabled = enabled;
     settings_store_.saveAmbientLightModeEnabled(enabled);
-    return redirectRoot();
+    return redirectRoot(server_);
   }
   if (target == "night_feature") {
     settings_.night_light_feature_enabled = enabled;
@@ -221,12 +190,7 @@ void SmartLightWeb::handleAction() {
     reboot_requested_ = true;
     return sendPage();
   }
-  redirectRoot();
-}
-
-void SmartLightWeb::redirectRoot() {
-  server_.sendHeader("Location", "/", true);
-  server_.send(303, "text/plain", "");
+  redirectRoot(server_);
 }
 
 void SmartLightWeb::sendPage() {

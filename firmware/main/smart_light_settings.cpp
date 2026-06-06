@@ -6,7 +6,7 @@
 #include "smart_light_settings.h"
 
 bool SmartLightSettingsStore::begin() {
-  return prefs_.begin(SmartLightSettings::kPrefPartition);
+  return prefs_.begin(SmartLightSettings::kPrefNamespace);
 }
 
 SmartLightSettings SmartLightSettingsStore::load() {

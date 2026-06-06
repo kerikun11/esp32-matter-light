@@ -8,6 +8,7 @@
 #include <esp_wifi.h>
 
 #include "app_log.h"
+#include "ota_utils.h"
 
 SmartLightController::SmartLightController()
     : command_handler_(command_parser_, settings_, settings_store_, ir_remote_,
@@ -17,7 +18,9 @@ SmartLightController::SmartLightController()
 void SmartLightController::begin() {
   led_.setBackground(RgbLed::Color::Green);
 
-  settings_store_.begin();
+  if (!settings_store_.begin()) {
+    LOGE("[Prefs] Failed to open settings");
+  }
   settings_ = settings_store_.load();
 
   ir_remote_.begin(CONFIG_APP_PIN_IR_TRANSMITTER, CONFIG_APP_PIN_IR_RECEIVER);
@@ -93,7 +96,9 @@ void SmartLightController::setupOta() {
     LOGI("[OTA] Progress: %u%% (%d/%d)", 100 * progress / total, progress,
          total);
   });
-  ArduinoOTA.onError([](ota_error_t error) { LOGI("[OTA] Error: %d", error); });
+  ArduinoOTA.onError([](ota_error_t error) {
+    LOGI("[OTA] Error: %s (%d)", ota_error_name(error), error);
+  });
   ArduinoOTA.begin();
 }
 
