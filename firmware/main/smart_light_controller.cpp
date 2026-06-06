@@ -14,7 +14,7 @@
 SmartLightController::SmartLightController()
     : command_handler_(command_parser_, settings_, settings_store_, ir_remote_,
                        brightness_sensor_),
-      web_(settings_, settings_store_, ir_remote_) {}
+      web_(settings_, settings_store_, ir_remote_, led_) {}
 
 void SmartLightController::begin() {
   led_.setBackground(RgbLed::Color::Green);
@@ -53,13 +53,25 @@ void SmartLightController::handle() {
 
   SmartLightRuntimeState state = buildRuntimeState_();
   const SmartLightRuntimeState previous_state = state;
-  (void)web_.consumeRequestedLightState(state.light_state);
-  (void)web_.consumeRequestedSwitchState(state.switch_state);
-  (void)web_.consumeRequestedNightState(state.night_state);
+  WebAction web_action = WebAction::None;
+  bool web_requested_value = false;
+  if (web_.consumeRequestedLightState(state.light_state)) {
+    web_action = WebAction::Light;
+    web_requested_value = state.light_state;
+  } else if (web_.consumeRequestedSwitchState(state.switch_state)) {
+    web_action = WebAction::Switch;
+    web_requested_value = state.switch_state;
+  } else if (web_.consumeRequestedNightState(state.night_state)) {
+    web_action = WebAction::Night;
+    web_requested_value = state.night_state;
+  }
+  const SmartLightRuntimeState directly_requested_state = state;
   applyMatterEvents(state);
   SmartLightAutomation::applyButtonPress(btn_.pressed(), state);
   applyIrInput(state);
   SmartLightAutomation::applyDerivedRules(previous_state, state);
+  reportWebAction_(web_action, web_requested_value, directly_requested_state,
+                   state);
   commitOutputs_(state);
   updateOccupancyLog(state.occupancy_state);
   updateStatusLed(state);
@@ -252,6 +264,58 @@ void SmartLightController::updateStatusLed(
     const SmartLightRuntimeState& state) {
   led_.setBackground(SmartLightAutomation::selectStatusColor(
       state, matter_light_.isCommissioned(), matter_light_.isConnected()));
+}
+
+void SmartLightController::reportWebAction_(
+    WebAction action, bool requested_value,
+    const SmartLightRuntimeState& directly_requested_state,
+    const SmartLightRuntimeState& final_state) {
+  if (action == WebAction::None) return;
+
+  const char* action_label = "";
+  switch (action) {
+    case WebAction::Light:
+      action_label = "照明";
+      break;
+    case WebAction::Switch:
+      action_label = "人感センサ連動";
+      break;
+    case WebAction::Night:
+      action_label = "常夜灯";
+      break;
+    case WebAction::None:
+      return;
+  }
+
+  String message = action_label;
+  message += requested_value ? "をオンにしました。" : "をオフにしました。";
+
+  String linked_changes;
+  auto append_change = [&linked_changes](const char* label, bool value) {
+    if (linked_changes.length()) linked_changes += "、";
+    linked_changes += label;
+    linked_changes += value ? "をオン" : "をオフ";
+  };
+
+  if (action != WebAction::Light &&
+      directly_requested_state.light_state != final_state.light_state) {
+    append_change("照明", final_state.light_state);
+  }
+  if (action != WebAction::Switch &&
+      directly_requested_state.switch_state != final_state.switch_state) {
+    append_change("人感センサ連動", final_state.switch_state);
+  }
+  if (action != WebAction::Night &&
+      directly_requested_state.night_state != final_state.night_state) {
+    append_change("常夜灯", final_state.night_state);
+  }
+
+  if (linked_changes.length()) {
+    message += " 連動して";
+    message += linked_changes;
+    message += "にしました。";
+  }
+  web_.showStatus(message);
 }
 
 void SmartLightController::handleDecommission() {

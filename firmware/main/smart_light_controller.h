@@ -28,6 +28,8 @@ class SmartLightController {
   void handle();
 
  private:
+  enum class WebAction { None, Light, Switch, Night };
+
   Button btn_{CONFIG_APP_PIN_BUTTON};
   RgbLed led_{CONFIG_APP_PIN_RGB_LED};
   MotionSensor motion_sensor_{CONFIG_APP_PIN_MOTION_SENSOR};
@@ -61,5 +63,8 @@ class SmartLightController {
                         bool suppress_off_signal);
   void updateOccupancyLog(bool occupancy_state);
   void updateStatusLed(const SmartLightRuntimeState& state);
+  void reportWebAction_(WebAction action, bool requested_value,
+                        const SmartLightRuntimeState& directly_requested_state,
+                        const SmartLightRuntimeState& final_state);
   void handleDecommission();
 };

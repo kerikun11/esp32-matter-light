@@ -7,6 +7,56 @@
 
 #include "app_log.h"
 
+namespace {
+
+constexpr char kWebPageTemplate[] =
+#include "smart_light_web_page.inc"
+    ;
+
+constexpr uint16_t kIrRecordTimeoutMs = 10000;
+constexpr uint16_t kIrRecordIndicatorMs = kIrRecordTimeoutMs + 1000;
+constexpr uint16_t kIrResultIndicatorMs = 500;
+
+void replaceTemplateValue(String& html, const char* key, const String& value) {
+  html.replace(key, value);
+}
+
+void replaceToggleValues(String& html, const char* action_key,
+                         const char* class_key, const char* state_key,
+                         bool enabled, const char* on_text = "オン",
+                         const char* off_text = "オフ") {
+  replaceTemplateValue(html, action_key, enabled ? "off" : "on");
+  replaceTemplateValue(html, class_key, enabled ? "on" : "off");
+  replaceTemplateValue(html, state_key, enabled ? on_text : off_text);
+}
+
+String escapeHtml(const char* value) {
+  String escaped(value);
+  escaped.replace("&", "&amp;");
+  escaped.replace("\"", "&quot;");
+  escaped.replace("<", "&lt;");
+  escaped.replace(">", "&gt;");
+  escaped.replace("'", "&#39;");
+  return escaped;
+}
+
+String buildNightControl(bool enabled) {
+  String html =
+      "<div class=\"control-item\"><span class=\"label\">常夜灯</span>"
+      "<form class=\"toggle-form\" method=\"post\" action=\"/action\">"
+      "<input type=\"hidden\" name=\"target\" value=\"night\">"
+      "<input type=\"hidden\" name=\"state\" value=\"";
+  html += enabled ? "off" : "on";
+  html += "\"><button class=\"toggle-btn ";
+  html += enabled ? "on" : "off";
+  html += "\">";
+  html += enabled ? "オン" : "オフ";
+  html += "</button></form></div>";
+  return html;
+}
+
+}  // namespace
+
 void SmartLightWeb::begin() {
   server_.on("/", HTTP_GET, [this]() { handleRoot(); });
   server_.on("/settings", HTTP_POST, [this]() { handleSaveSettings(); });
@@ -28,24 +78,15 @@ void SmartLightWeb::setObservedStates(bool light_state, bool switch_state,
 }
 
 bool SmartLightWeb::consumeRequestedLightState(bool& light_state) {
-  if (!requested_light_state_pending_) return false;
-  light_state = requested_light_state_;
-  requested_light_state_pending_ = false;
-  return true;
+  return requested_light_state_.consume(light_state);
 }
 
 bool SmartLightWeb::consumeRequestedSwitchState(bool& switch_state) {
-  if (!requested_switch_state_pending_) return false;
-  switch_state = requested_switch_state_;
-  requested_switch_state_pending_ = false;
-  return true;
+  return requested_switch_state_.consume(switch_state);
 }
 
 bool SmartLightWeb::consumeRequestedNightState(bool& night_state) {
-  if (!requested_night_state_pending_) return false;
-  night_state = requested_night_state_;
-  requested_night_state_pending_ = false;
-  return true;
+  return requested_night_state_.consume(night_state);
 }
 
 bool SmartLightWeb::consumeRebootRequested() {
@@ -70,6 +111,11 @@ void SmartLightWeb::logRequest() {
   LOGI("[Web] %s %s %s", method, server_.uri().c_str(), args.c_str());
 }
 
+void SmartLightWeb::showStatus(const String& message, bool is_error) {
+  status_message_ = message;
+  status_is_error_ = is_error;
+}
+
 void SmartLightWeb::handleRoot() {
   logRequest();
   sendPage();
@@ -80,18 +126,23 @@ void SmartLightWeb::handleSaveSettings() {
   const String hostname = server_.arg("hostname");
   const int timeout_seconds = server_.arg("timeout").toInt();
   const int ambient_threshold = server_.arg("ambient_threshold").toInt();
-  settings_.hostname = hostname.length() ? hostname.c_str() : settings_.hostname;
-  settings_.light_off_timeout_seconds =
-      timeout_seconds > 0 ? timeout_seconds : settings_.light_off_timeout_seconds;
-  if (ambient_threshold >= 0 && ambient_threshold <= 100) {
-    settings_.ambient_light_threshold_percent = ambient_threshold;
+  if (!hostname.length() || timeout_seconds <= 0 || ambient_threshold < 0 ||
+      ambient_threshold > 100) {
+    showStatus("入力内容を確認してください。設定は保存されませんでした。",
+               true);
+    return redirectRoot();
   }
+
+  settings_.hostname = hostname.c_str();
+  settings_.light_off_timeout_seconds = timeout_seconds;
+  settings_.ambient_light_threshold_percent = ambient_threshold;
 
   settings_store_.saveHostname(settings_.hostname);
   settings_store_.saveLightOffTimeoutSeconds(settings_.light_off_timeout_seconds);
   settings_store_.saveAmbientLightThresholdPercent(
       settings_.ambient_light_threshold_percent);
   hostname_updated_ = true;
+  showStatus("基本設定を保存しました。");
   redirectRoot();
 }
 
@@ -99,23 +150,36 @@ void SmartLightWeb::handleRecord() {
   logRequest();
   const String target = server_.arg("target");
   if (target != "on" && target != "off" && target != "night") {
+    showStatus("赤外線リモコンの記録対象が不正です。", true);
     return redirectRoot();
   }
 
   ir_remote_.clear();
-  if (!ir_remote_.waitForAvailable(10000)) return redirectRoot();
+  led_.blinkOnce(RgbLed::Color::Yellow, kIrRecordIndicatorMs);
+  if (!ir_remote_.waitForAvailable(kIrRecordTimeoutMs)) {
+    led_.blinkOnce(RgbLed::Color::Red, kIrResultIndicatorMs);
+    showStatus("赤外線信号を受信できませんでした。もう一度お試しください。",
+               true);
+    return redirectRoot();
+  }
 
   const auto ir_data = ir_remote_.get();
+  String recorded_button;
   if (target == "on") {
     settings_.ir_data_light_on = ir_data;
     settings_store_.saveIrDataLightOn(settings_.ir_data_light_on);
+    recorded_button = "点灯";
   } else if (target == "off") {
     settings_.ir_data_light_off = ir_data;
     settings_store_.saveIrDataLightOff(settings_.ir_data_light_off);
+    recorded_button = "消灯";
   } else {
     settings_.ir_data_night = ir_data;
     settings_store_.saveIrDataNight(settings_.ir_data_night);
+    recorded_button = "常夜灯";
   }
+  led_.blinkOnce(RgbLed::Color::Green, kIrResultIndicatorMs);
+  showStatus(recorded_button + "ボタンの赤外線信号を記録しました。");
   redirectRoot();
 }
 
@@ -127,18 +191,15 @@ void SmartLightWeb::handleAction() {
   if (state != "on" && state != "off") return redirectRoot();
 
   if (target == "light") {
-    requested_light_state_ = enabled;
-    requested_light_state_pending_ = true;
+    requested_light_state_.request(enabled);
     return redirectRoot();
   }
   if (target == "switch") {
-    requested_switch_state_ = enabled;
-    requested_switch_state_pending_ = true;
+    requested_switch_state_.request(enabled);
     return redirectRoot();
   }
   if (target == "night") {
-    requested_night_state_ = enabled;
-    requested_night_state_pending_ = true;
+    requested_night_state_.request(enabled);
     return redirectRoot();
   }
   if (target == "ambient") {
@@ -149,8 +210,11 @@ void SmartLightWeb::handleAction() {
   if (target == "night_feature") {
     settings_.night_light_feature_enabled = enabled;
     settings_store_.saveNightLightFeatureEnabled(enabled);
+    showStatus(String("常夜灯エンドポイントを") +
+               (enabled ? "有効" : "無効") +
+               "にしました。再起動しています。");
     reboot_requested_ = true;
-    return redirectRoot();
+    return sendPage();
   }
   redirectRoot();
 }
@@ -160,91 +224,65 @@ void SmartLightWeb::redirectRoot() {
   server_.send(303, "text/plain", "");
 }
 
-void SmartLightWeb::sendPage() { server_.send(200, "text/html", buildPage()); }
+void SmartLightWeb::sendPage() {
+  server_.send(200, "text/html", buildPage());
+  status_message_ = "";
+  status_is_error_ = false;
+}
 
 String SmartLightWeb::buildPage() const {
-  String html;
-  html.reserve(4096);
+  String html(kWebPageTemplate);
+  html.reserve(html.length() + 512);
 
-  const String ambient_threshold = String(settings_.ambient_light_threshold_percent);
-  const String light_state = observed_light_state_ ? "ON" : "OFF";
-  const String switch_state = observed_switch_state_ ? "ON" : "OFF";
-  const String night_state = observed_night_state_ ? "ON" : "OFF";
-  const String light_class = observed_light_state_ ? "on" : "off";
-  const String switch_class = observed_switch_state_ ? "on" : "off";
-  const String night_class = observed_night_state_ ? "on" : "off";
-  const String ambient_value = String(observed_ambient_light_percent_);
-  const String ambient_state =
-      settings_.ambient_light_mode_enabled ? "Enabled" : "Disabled";
-  const String ambient_class =
-      settings_.ambient_light_mode_enabled ? "on" : "off";
-  const String night_feature_state =
-      settings_.night_light_feature_enabled ? "ON" : "OFF";
-  const String night_feature_class =
-      settings_.night_light_feature_enabled ? "on" : "off";
+  replaceTemplateValue(html, "{{PREVIEW_NOTICE}}", "");
+  replaceTemplateValue(html, "{{SETTINGS_OPEN}}", "");
 
-  html += "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Smart Light Controller</title>";
-  html += "<style>:root{--bg:#f3f6fb;--panel:#ffffff;--line:#dbe3ef;--ink:#17212b;--muted:#64748b;--accent:#2563eb;--accent-soft:#e8f0ff;--good:#15803d;--good-soft:#e8f7ee;--bad:#b42318;--bad-soft:#fdecec;--shadow:0 10px 30px rgba(15,23,42,.08)}*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#f8fbff 0,#eef3f9 100%);color:var(--ink);font:15px/1.5 Inter,Segoe UI,Helvetica,sans-serif}main{max-width:880px;margin:0 auto;padding:24px 16px 40px}.hero,.card,.fold{background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow)}.hero{padding:24px}.hero h1{margin:0 0 6px;font-size:32px;line-height:1.05}.sub{margin:0;color:var(--muted)}.topbar,.stats,.control-grid,.two-col{display:grid;gap:14px}.topbar{grid-template-columns:1.25fr .75fr;margin-top:18px}.stats{grid-template-columns:repeat(2,1fr)}.stat,.card{padding:18px}.label{display:block;margin-bottom:8px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.value{font-size:24px;font-weight:700}.meta{margin-top:10px;color:var(--muted);font-size:14px}.card h2{margin:0 0 14px;font-size:20px}.control-grid{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}.control-item{display:grid;gap:10px}.toggle-form{margin:0}.toggle-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:116px;padding:10px 14px;border:none;border-radius:999px;font-size:14px;font-weight:700;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,filter .16s ease}.toggle-btn:before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor}.toggle-btn.on{background:var(--good-soft);color:var(--good)}.toggle-btn.off{background:var(--bad-soft);color:var(--bad)}.toggle-btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(15,23,42,.08);filter:brightness(.96)}.two-col{grid-template-columns:1fr;margin-top:14px}.stack{display:grid;gap:14px}form{margin:0}.field{display:grid;gap:6px}.field span{color:var(--muted);font-size:13px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px}.range-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}input[type=text],input[type=number]{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit}input[type=range]{width:100%;accent-color:var(--accent)}button{appearance:none;border:none;border-radius:12px;padding:11px 14px;background:var(--accent);color:#fff;font:700 14px/1 Inter,Segoe UI,sans-serif;cursor:pointer;transition:background-color .16s ease,transform .16s ease,box-shadow .16s ease}button:hover{background:#1d4ed8;box-shadow:0 8px 18px rgba(37,99,235,.18)}button.warn{background:#0f172a;color:#fff}button.warn:hover{background:#1e293b}.mini{font-size:13px;color:var(--muted)}details.fold{overflow:hidden;margin-top:14px}details.fold summary{list-style:none;cursor:pointer;padding:18px 20px;font-weight:700}details.fold summary::-webkit-details-marker{display:none}details.fold summary span{color:var(--muted);font-weight:600;margin-left:8px}details.fold .body{padding:0 20px 20px}@media (max-width:760px){.topbar,.stats,.control-grid,.two-col{grid-template-columns:1fr}.hero h1{font-size:28px}}</style></head><body><main>";
-
-  html += "<section class=hero><h1><a href=/ style='color:inherit;text-decoration:none'>Smart Light Controller</a></h1><div class=topbar><section class=card><div class=control-grid><div class=control-item><span class=label>Light</span><form class=toggle-form method=post action=/action><input type=hidden name=target value=light><input type=hidden name=state value='";
-  html += observed_light_state_ ? "off" : "on";
-  html += "'><button class='toggle-btn ";
-  html += light_class;
-  html += "'>";
-  html += light_state;
-  html += "</button></form></div><div class=control-item><span class=label>Motion Link</span><form class=toggle-form method=post action=/action><input type=hidden name=target value=switch><input type=hidden name=state value='";
-  html += observed_switch_state_ ? "off" : "on";
-  html += "'><button class='toggle-btn ";
-  html += switch_class;
-  html += "'>";
-  html += switch_state;
-  html += "</button></form></div>";
-  if (settings_.night_light_feature_enabled) {
-    html += "<div class=control-item><span class=label>Night</span><form class=toggle-form method=post action=/action><input type=hidden name=target value=night><input type=hidden name=state value='";
-    html += observed_night_state_ ? "off" : "on";
-    html += "'><button class='toggle-btn ";
-    html += night_class;
-    html += "'>";
-    html += night_state;
-    html += "</button></form></div>";
+  String status_notice;
+  if (status_message_.length()) {
+    status_notice = "<div class=\"status ";
+    status_notice += status_is_error_ ? "error" : "success";
+    status_notice += "\">";
+    status_notice += status_message_;
+    status_notice += "</div>";
   }
-  html += "</div></section><div class=stats>";
-  html += "<div class=stat><span class=label>Ambient Light</span><div class=value>";
-  html += ambient_value;
-  html += "%</div></div></div></div></section>";
+  replaceTemplateValue(html, "{{STATUS_NOTICE}}", status_notice);
 
-  if (reboot_requested_) {
-    html += "<div style='background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;padding:14px 18px;margin-top:14px;font-size:14px;color:#92400e'>Rebooting... please wait a few seconds then refresh the page.</div>";
-  }
-  html += "<div class=two-col><details class=fold><summary>Settings<span>Click to expand</span></summary><div class=body><form class=stack method=post action=/settings><label class=field><span>Hostname</span><input name=hostname value='";
-  html += settings_.hostname.c_str();
-  html += "'></label><div class=row><label class=field style='flex:1'><span>Light Off Timeout</span><input name=timeout type=number min=1 value='";
-  html += String(settings_.light_off_timeout_seconds);
-  html += "'></label></div><div class=field><span>Ambient Mode Threshold</span><div class=range-row><input id=t name=ambient_threshold type=range min=0 max=100 value='";
-  html += ambient_threshold;
-  html += "' oninput='tv.textContent=this.value'><strong><span id=tv>";
-  html += ambient_threshold;
-  html += "</span>%</strong></div></div><div class=row><p class=mini>Changes are stored immediately after save.</p><button>Save Settings</button></div></form><div class=row style='margin-top:14px;padding-top:14px;border-top:1px solid var(--line)'><div class=field style='flex:1'><span>Ambient Mode</span><span class=mini style='margin-top:2px'>Uses ambient light level to control automatic lighting.</span></div><form class=toggle-form method=post action=/action><input type=hidden name=target value=ambient><input type=hidden name=state value='";
-  html += settings_.ambient_light_mode_enabled ? "off" : "on";
-  html += "'><button class='toggle-btn ";
-  html += ambient_class;
-  html += "'>";
-  html += ambient_state;
-  html += "</button></form></div><div class=row style='margin-top:14px;padding-top:14px;border-top:1px solid var(--line)'><div class=field style='flex:1'><span>Night Light Endpoint</span><span class=mini style='margin-top:2px'>Enables the Matter night light endpoint. Device will reboot automatically after changing this setting.</span></div><form class=toggle-form method=post action=/action><input type=hidden name=target value=night_feature><input type=hidden name=state value='";
-  html += settings_.night_light_feature_enabled ? "off" : "on";
-  html += "'><button class='toggle-btn ";
-  html += night_feature_class;
-  html += "'>";
-  html += night_feature_state;
-  html += "</button></form></div></div></details>";
+  replaceToggleValues(html, "{{LIGHT_ACTION}}", "{{LIGHT_CLASS}}",
+                      "{{LIGHT_STATE}}", observed_light_state_);
+  replaceToggleValues(html, "{{SWITCH_ACTION}}", "{{SWITCH_CLASS}}",
+                      "{{SWITCH_STATE}}", observed_switch_state_);
+
   if (settings_.night_light_feature_enabled) {
-    html += "<details class=fold><summary>Learn IR<span>Click to expand</span></summary><div class=body><p class=mini>Press a record button, then send the remote signal within 10 seconds.</p><form class=group method=post action=/record><button class=warn name=target value=on>Record ON</button><button class=warn name=target value=off>Record OFF</button><button class=warn name=target value=night>Record NIGHT</button></form></div></details>";
+    replaceTemplateValue(html, "{{NIGHT_CONTROL}}",
+                         buildNightControl(observed_night_state_));
+    replaceTemplateValue(
+        html, "{{NIGHT_RECORD_BUTTON}}",
+        "<button class=\"warn\" name=\"target\" value=\"night\">常夜灯ボタンを記録</button>");
   } else {
-    html += "<details class=fold><summary>Learn IR<span>Click to expand</span></summary><div class=body><p class=mini>Press a record button, then send the remote signal within 10 seconds.</p><form class=group method=post action=/record><button class=warn name=target value=on>Record ON</button><button class=warn name=target value=off>Record OFF</button></form></div></details>";
+    replaceTemplateValue(html, "{{NIGHT_CONTROL}}", "");
+    replaceTemplateValue(html, "{{NIGHT_RECORD_BUTTON}}", "");
   }
-  html += "</div>";
 
-  html += "</main></body></html>";
+  replaceTemplateValue(html, "{{AMBIENT_VALUE}}",
+                       String(observed_ambient_light_percent_));
+  replaceToggleValues(html, "{{AMBIENT_ACTION}}",
+                      "{{AMBIENT_STATUS_CLASS}}",
+                      "{{AMBIENT_STATUS_STATE}}",
+                      settings_.ambient_light_mode_enabled);
+  replaceTemplateValue(html, "{{REBOOT_NOTICE}}",
+                       reboot_requested_
+                           ? "<div class=\"notice\">再起動しています。数秒待ってからページを再読み込みしてください。</div>"
+                           : "");
+  replaceTemplateValue(html, "{{HOSTNAME}}",
+                       escapeHtml(settings_.hostname.c_str()));
+  replaceTemplateValue(html, "{{TIMEOUT}}",
+                       String(settings_.light_off_timeout_seconds));
+  replaceTemplateValue(html, "{{AMBIENT_THRESHOLD}}",
+                       String(settings_.ambient_light_threshold_percent));
+  replaceToggleValues(html, "{{NIGHT_FEATURE_ACTION}}",
+                      "{{NIGHT_FEATURE_CLASS}}",
+                      "{{NIGHT_FEATURE_STATE}}",
+                      settings_.night_light_feature_enabled, "有効", "無効");
 
   return html;
 }
