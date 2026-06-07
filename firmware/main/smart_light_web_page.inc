@@ -3,6 +3,8 @@ R"HTML(<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" media="(prefers-color-scheme: light)" href="https://api.iconify.design/mdi/ceiling-light.svg?color=%23000000">
+  <link rel="icon" media="(prefers-color-scheme: dark)" href="https://api.iconify.design/mdi/ceiling-light.svg?color=%23ffffff">
   <title>{{DEVICE_NAME}}</title>
   <style>
     :root{--panel:#fff;--line:#dbe3ef;--ink:#17212b;--muted:#64748b;--accent:#2563eb;--good:#166534;--bad:#991b1b;--shadow:0 10px 30px rgba(15,23,42,.08)}
