@@ -32,6 +32,9 @@ void SmartLightController::begin() {
   last_night_state_ = false;
   matter_light_.begin(last_light_state_, last_switch_state_, last_night_state_,
                       settings_.night_light_feature_enabled);
+  if (esp_wifi_set_ps(WIFI_PS_NONE) != ESP_OK) {
+    LOGW("[Wi-Fi] Failed to disable power save");
+  }
 
   setupOta();
   web_.begin();
