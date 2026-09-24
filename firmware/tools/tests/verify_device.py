@@ -19,8 +19,8 @@ Not covered (needs a human / real hardware / a Matter controller):
   - an actual /update OTA flash (slow, and reboots the device)
 
 Usage:
-    python3 firmware/tools/verify_device.py --host xiao.local
-    python3 firmware/tools/verify_device.py --host 192.168.0.60 -v
+    python3 firmware/tools/tests/verify_device.py --host xiao.local
+    python3 firmware/tools/tests/verify_device.py --host 192.168.0.60 -v
 """
 
 from __future__ import annotations
@@ -37,11 +37,6 @@ from typing import Callable
 from urllib.parse import urlencode
 
 
-TOGGLE_RE = re.compile(
-    r'name="target" value="(?P<target>\w+)">\s*'
-    r'<input type="hidden" name="state" value="(?P<next_state>on|off)">\s*'
-    r'<button class="toggle-btn (?P<current_class>on|off)"'
-)
 
 
 class Failure(Exception):
@@ -52,7 +47,7 @@ class Failure(Exception):
 class PageState:
     # target -> (currently "on" or "off", the state value the toggle button would submit next)
     toggles: dict[str, tuple[str, str]]
-    raw_html: str
+    values: dict
 
 
 class Device:
@@ -87,6 +82,13 @@ class Device:
         start = time.monotonic()
         req = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        # Match what the real JS client sends (see main/web/index.html's
+        # request() helper): without this, the server falls back to its
+        # legacy 303-redirect-to-/ response for non-JS clients, and urllib
+        # transparently follows it -- silently turning every mutation into
+        # a full ~13KB page fetch instead of the small JSON response, which
+        # then intermittently trips over this device's known Wi-Fi latency.
+        req.add_header("Accept", "application/json")
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 body = resp.read()
@@ -106,15 +108,15 @@ class Device:
         return json.loads(body.decode("utf-8"))
 
     def page(self) -> PageState:
-        status, body, _ = self.get("/")
+        status, body, _ = self.get("/state")
         if status != 200:
-            raise Failure(f"GET / returned HTTP {status}")
-        html = body.decode("utf-8")
-        toggles = {
-            m.group("target"): (m.group("current_class"), m.group("next_state"))
-            for m in TOGGLE_RE.finditer(html)
-        }
-        return PageState(toggles=toggles, raw_html=html)
+            raise Failure(f"GET /state returned HTTP {status}")
+        values = json.loads(body.decode("utf-8"))
+        targets = ["light", "switch", "ambient", "night_feature"]
+        if values["night_feature"]: targets.append("night")
+        toggles = {key: ("on" if values[key] else "off", "off" if values[key] else "on")
+                   for key in targets}
+        return PageState(toggles=toggles, values=values)
 
     def action(self, target: str, state: str) -> None:
         status, _, _ = self.post_form("/action", {"target": target, "state": state})
@@ -163,6 +165,8 @@ def test_version(dev: Device) -> None:
 
 
 def test_root_page(dev: Device) -> None:
+    status, body, _ = dev.get("/")
+    expect(status == 200 and b"<form" in body, "static page is missing forms")
     page = dev.page()
     expect("light" in page.toggles, "light toggle not found on page")
     expect("switch" in page.toggles, "switch (occupancy) toggle not found on page")
@@ -273,52 +277,16 @@ def test_burst_requests_end_in_consistent_state(dev: Device) -> None:
 
 
 def test_settings_round_trip(dev: Device) -> None:
-    page = dev.page()
-    m = re.search(r'name="device_name"[^>]*value="([^"]*)"', page.raw_html)
-    expect(m is not None, "device_name field not found on page")
-    original_device_name = m.group(1)
-    m = re.search(r'name="hostname"[^>]*value="([^"]*)"', page.raw_html)
-    expect(m is not None, "hostname field not found on page")
-    original_hostname = m.group(1)
-    m = re.search(r'name="timeout"[^>]*value="(\d+)"', page.raw_html)
-    expect(m is not None, "timeout field not found on page")
-    original_timeout = m.group(1)
-    m = re.search(r'name="ambient_threshold"[^>]*value="(\d+)"', page.raw_html)
-    expect(m is not None, "ambient_threshold field not found on page")
-    original_threshold = m.group(1)
-
-    probe_timeout = "601" if original_timeout != "601" else "602"
+    original = dev.page().values
+    fields = {key: str(original[key]) for key in
+              ("device_name", "hostname", "timeout", "ambient_threshold")}
+    probe = "601" if fields["timeout"] != "601" else "602"
     try:
-        dev.settings(
-            device_name=original_device_name,
-            hostname=original_hostname,
-            timeout=probe_timeout,
-            ambient_threshold=original_threshold,
-        )
-        time.sleep(1.0)
-        page = dev.page()
-        m = re.search(r'name="timeout"[^>]*value="(\d+)"', page.raw_html)
-        expect(m is not None, "timeout field not found after settings save")
-        expect(
-            m.group(1) == probe_timeout,
-            f"settings save didn't take: expected timeout={probe_timeout}, got {m.group(1)}",
-        )
+        dev.settings(**{**fields, "timeout": probe})
+        expect(dev.page().values["timeout"] == int(probe), "settings save failed")
     finally:
-        # Always restore, even if the assertion above failed.
-        dev.settings(
-            device_name=original_device_name,
-            hostname=original_hostname,
-            timeout=original_timeout,
-            ambient_threshold=original_threshold,
-        )
-        time.sleep(1.0)
-        page = dev.page()
-        m = re.search(r'name="timeout"[^>]*value="(\d+)"', page.raw_html)
-        if not m or m.group(1) != original_timeout:
-            print(
-                "    ! WARNING: failed to restore original timeout "
-                f"({original_timeout}); device may be left with timeout={probe_timeout}"
-            )
+        dev.settings(**fields)
+        expect(dev.page().values["timeout"] == original["timeout"], "settings restore failed")
 
 
 TESTS: list[tuple[str, Test]] = [

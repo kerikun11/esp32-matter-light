@@ -6,8 +6,10 @@
 
 #include <esp_err.h>
 
+#include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "app_config.h"
 #include "brightness_sensor.h"
@@ -54,6 +56,7 @@ class SmartLightController {
   bool last_occupancy_state_ = false;
   std::string mdns_hostname_;
   uint32_t mdns_ipv4_address_ = 0;
+  std::vector<std::array<uint32_t, 4>> mdns_ipv6_addresses_;
   int64_t last_mdns_sync_attempt_ms_ = 0;
   esp_err_t last_mdns_error_ = ESP_OK;
   int64_t last_wifi_ps_attempt_ms_ = 0;

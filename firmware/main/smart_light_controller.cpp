@@ -5,6 +5,8 @@
 
 #include "smart_light_controller.h"
 
+#include <algorithm>
+
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -90,6 +92,7 @@ void SmartLightController::handle() {
   web_.setObservedStates(
       state.light_state, state.switch_state, state.night_state,
       static_cast<int>(brightness_sensor_.getNormalized() * 100.0f + 0.5f));
+  if (web_action != WebAction::None) web_.completeAction();
   updateOccupancyLog(state.occupancy_state);
   updateStatusLed(state);
   handleDecommission();
@@ -101,17 +104,12 @@ void SmartLightController::syncWifiPowerSave_() {
   if (now - last_wifi_ps_attempt_ms_ < kRetryIntervalMs) return;
   last_wifi_ps_attempt_ms_ = now;
 
-  // Right after begin(), the Wi-Fi driver may not be started yet (Matter
-  // brings it up asynchronously), so this can transiently fail; retry until
-  // the driver is ready instead of giving up after a single attempt.
-  //
-  // Keep reasserting this every second rather than stopping after the first
-  // success: the Matter/Wi-Fi stack can re-enable modem-sleep power save on
-  // its own later (e.g. around reconnects), and once that happens, the first
-  // HTTP request after any idle period stalls for several seconds while the
-  // radio wakes back up -- directly undermining the /update OTA endpoint's
-  // "just curl it" usability.
-  esp_wifi_set_ps(WIFI_PS_NONE);
+  // Matter starts Wi-Fi asynchronously and may change power save later.
+  // Only write when needed; setting the same value also emits a driver log.
+  wifi_ps_type_t power_save;
+  if (esp_wifi_get_ps(&power_save) == ESP_OK && power_save != WIFI_PS_NONE) {
+    esp_wifi_set_ps(WIFI_PS_NONE);
+  }
 }
 
 void SmartLightController::syncHostnames_() {
@@ -148,15 +146,34 @@ void SmartLightController::syncAdditionalMdnsHostname_(bool force) {
          mdns_hostname_.c_str());
     mdns_hostname_.clear();
     mdns_ipv4_address_ = 0;
+    mdns_ipv6_addresses_.clear();
   }
 
-  mdns_ip_addr_t address{};
-  address.addr.type = ESP_IPADDR_TYPE_V4;
-  address.addr.u_addr.ip4 = ip_info.ip;
+  // Publish only addresses that have completed duplicate-address detection.
+  // IPv6 may become ready after IPv4, or change later after a router update.
+  esp_ip6_addr_t ip6[CONFIG_LWIP_IPV6_NUM_ADDRESSES]{};
+  const int ip6_count = esp_netif_get_all_preferred_ip6(netif, ip6);
+  std::vector<std::array<uint32_t, 4>> ipv6_addresses;
+  for (int i = 0; i < ip6_count; ++i) {
+    ipv6_addresses.push_back(
+        {ip6[i].addr[0], ip6[i].addr[1], ip6[i].addr[2], ip6[i].addr[3]});
+  }
+  // Compare address sets independently of their order in the interface.
+  std::sort(ipv6_addresses.begin(), ipv6_addresses.end());
+
+  mdns_ip_addr_t addresses[1 + CONFIG_LWIP_IPV6_NUM_ADDRESSES]{};
+  addresses[0].addr.type = ESP_IPADDR_TYPE_V4;
+  addresses[0].addr.u_addr.ip4 = ip_info.ip;
+  for (size_t i = 0; i < ipv6_addresses.size(); ++i) {
+    addresses[i].next = &addresses[i + 1];
+    addresses[i + 1].addr.type = ESP_IPADDR_TYPE_V6;
+    std::copy(ipv6_addresses[i].begin(), ipv6_addresses[i].end(),
+              addresses[i + 1].addr.u_addr.ip6.addr);
+  }
 
   if (mdns_hostname_.empty()) {
     const esp_err_t err =
-        mdns_delegate_hostname_add(settings_.hostname.c_str(), &address);
+        mdns_delegate_hostname_add(settings_.hostname.c_str(), addresses);
     if (err != ESP_OK) {
       if (err != last_mdns_error_) {
         LOGW("[mDNS] Failed to add %s.local: %s", settings_.hostname.c_str(),
@@ -176,22 +193,27 @@ void SmartLightController::syncAdditionalMdnsHostname_(bool force) {
     }
     mdns_hostname_ = settings_.hostname;
     mdns_ipv4_address_ = ip_info.ip.addr;
-    LOGI("[mDNS] Added additional hostname: %s.local -> " IPSTR,
-         mdns_hostname_.c_str(), IP2STR(&ip_info.ip));
+    mdns_ipv6_addresses_ = ipv6_addresses;
+    LOGI("[mDNS] Added additional hostname: %s.local -> " IPSTR
+         " (%u IPv6 addresses)", mdns_hostname_.c_str(), IP2STR(&ip_info.ip),
+         static_cast<unsigned>(ipv6_addresses.size()));
     return;
   }
 
-  if (mdns_ipv4_address_ == ip_info.ip.addr) return;
+  if (mdns_ipv4_address_ == ip_info.ip.addr &&
+      mdns_ipv6_addresses_ == ipv6_addresses) return;
   const esp_err_t err =
-      mdns_delegate_hostname_set_address(mdns_hostname_.c_str(), &address);
+      mdns_delegate_hostname_set_address(mdns_hostname_.c_str(), addresses);
   if (err != ESP_OK) {
     LOGW("[mDNS] Failed to update %s.local: %s", mdns_hostname_.c_str(),
          esp_err_to_name(err));
     return;
   }
   mdns_ipv4_address_ = ip_info.ip.addr;
-  LOGI("[mDNS] Updated address: %s.local -> " IPSTR, mdns_hostname_.c_str(),
-       IP2STR(&ip_info.ip));
+  mdns_ipv6_addresses_ = ipv6_addresses;
+  LOGI("[mDNS] Updated addresses: %s.local -> " IPSTR
+       " (%u IPv6 addresses)", mdns_hostname_.c_str(), IP2STR(&ip_info.ip),
+       static_cast<unsigned>(ipv6_addresses.size()));
 }
 
 SmartLightRuntimeState SmartLightController::buildRuntimeState_() const {

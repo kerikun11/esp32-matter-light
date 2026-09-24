@@ -13,35 +13,6 @@
 
 #include "app_log.h"
 
-inline void replaceTemplateValue(std::string& html, const char* key,
-                                 const std::string& value) {
-  const size_t key_len = strlen(key);
-  size_t pos = 0;
-  while ((pos = html.find(key, pos)) != std::string::npos) {
-    html.replace(pos, key_len, value);
-    pos += value.length();
-  }
-}
-
-inline std::string escapeHtml(const char* value) {
-  std::string escaped(value);
-  auto replaceAll = [&escaped](const char* from, const char* to) {
-    const size_t from_len = strlen(from);
-    const size_t to_len = strlen(to);
-    size_t pos = 0;
-    while ((pos = escaped.find(from, pos)) != std::string::npos) {
-      escaped.replace(pos, from_len, to);
-      pos += to_len;
-    }
-  };
-  replaceAll("&", "&amp;");
-  replaceAll("\"", "&quot;");
-  replaceAll("<", "&lt;");
-  replaceAll(">", "&gt;");
-  replaceAll("'", "&#39;");
-  return escaped;
-}
-
 inline std::string trim(const std::string& s) {
   const size_t start = s.find_first_not_of(" \t\r\n");
   if (start == std::string::npos) return "";

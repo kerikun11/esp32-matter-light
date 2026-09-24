@@ -6,40 +6,26 @@
 #include "smart_light_web.h"
 
 #include <cstdlib>
+#include <cJSON.h>
+#include <esp_timer.h>
+#include <freertos/task.h>
 
 #include "web_utils.h"
+#include "web_asset_http.h"
+#include "web_assets.h"
 
 namespace {
-
-constexpr char kWebPageTemplate[] =
-#include "smart_light_web_page.inc"
-    ;
 
 constexpr uint16_t kIrRecordTimeoutMs = 10000;
 constexpr uint16_t kIrResultIndicatorMs = 500;
 
-void replaceToggleValues(std::string& html, const char* action_key,
-                         const char* class_key, const char* state_key,
-                         bool enabled, const char* on_text = "オン",
-                         const char* off_text = "オフ") {
-  replaceTemplateValue(html, action_key, enabled ? "off" : "on");
-  replaceTemplateValue(html, class_key, enabled ? "on" : "off");
-  replaceTemplateValue(html, state_key, enabled ? on_text : off_text);
-}
-
-std::string buildNightControl(bool enabled) {
-  std::string html =
-      "<div class=\"control-item\"><span class=\"label\">常夜灯</span>"
-      "<form class=\"toggle-form\" method=\"post\" action=\"/action\">"
-      "<input type=\"hidden\" name=\"target\" value=\"night\">"
-      "<input type=\"hidden\" name=\"state\" value=\"";
-  html += enabled ? "off" : "on";
-  html += "\"><button class=\"toggle-btn ";
-  html += enabled ? "on" : "off";
-  html += "\">";
-  html += enabled ? "オン" : "オフ";
-  html += "</button></form></div>";
-  return html;
+std::string requestHeader(httpd_req_t* req, const char* name) {
+  const size_t length = httpd_req_get_hdr_value_len(req, name);
+  if (length == 0) return {};
+  std::string value(length + 1, '\0');
+  if (httpd_req_get_hdr_value_str(req, name, value.data(), value.size()) != ESP_OK) return {};
+  value.resize(length);
+  return value;
 }
 
 }  // namespace
@@ -72,7 +58,11 @@ void SmartLightWeb::begin() {
   const httpd_uri_t action_uri = {
       .uri = "/action", .method = HTTP_POST,
       .handler = &handleActionTrampoline, .user_ctx = this};
+  const httpd_uri_t state_uri = {
+      .uri = "/state", .method = HTTP_GET,
+      .handler = &handleStateTrampoline, .user_ctx = this};
   httpd_register_uri_handler(server_, &root_uri);
+  httpd_register_uri_handler(server_, &state_uri);
   httpd_register_uri_handler(server_, &settings_uri);
   httpd_register_uri_handler(server_, &record_uri);
   httpd_register_uri_handler(server_, &action_uri);
@@ -117,9 +107,14 @@ bool SmartLightWeb::consumeRequestedNightState(bool& night_state) {
 
 bool SmartLightWeb::consumeRebootRequested() {
   Lock lock(mutex_);
-  if (!reboot_requested_) return false;
+  if (!reboot_requested_ || esp_timer_get_time() < reboot_after_us_) return false;
   reboot_requested_ = false;
   return true;
+}
+
+void SmartLightWeb::completeAction() {
+  Lock lock(mutex_);
+  action_in_progress_ = false;
 }
 
 void SmartLightWeb::showStatus(const std::string& message, bool is_error) {
@@ -130,8 +125,7 @@ void SmartLightWeb::showStatus(const std::string& message, bool is_error) {
 
 esp_err_t SmartLightWeb::handleRoot(httpd_req_t* req) {
   logRequest(req);
-  sendPage(req);
-  return ESP_OK;
+  return sendPage(req);
 }
 
 esp_err_t SmartLightWeb::handleSaveSettings(httpd_req_t* req) {
@@ -147,8 +141,7 @@ esp_err_t SmartLightWeb::handleSaveSettings(httpd_req_t* req) {
       ambient_threshold > 100) {
     showStatus("入力内容を確認してください。設定は保存されませんでした。",
                true);
-    redirectRoot(req);
-    return ESP_OK;
+    return respondMutation(req);
   }
 
   {
@@ -164,8 +157,7 @@ esp_err_t SmartLightWeb::handleSaveSettings(httpd_req_t* req) {
   settings_store_.saveLightOffTimeoutSeconds(timeout_seconds);
   settings_store_.saveAmbientLightThresholdPercent(ambient_threshold);
   showStatus("基本設定を保存しました。");
-  redirectRoot(req);
-  return ESP_OK;
+  return respondMutation(req);
 }
 
 esp_err_t SmartLightWeb::handleRecord(httpd_req_t* req) {
@@ -174,8 +166,7 @@ esp_err_t SmartLightWeb::handleRecord(httpd_req_t* req) {
   const std::string target = formValue(fields, "target");
   if (target != "on" && target != "off" && target != "night") {
     showStatus("赤外線リモコンの記録対象が不正です。", true);
-    redirectRoot(req);
-    return ESP_OK;
+    return respondMutation(req);
   }
 
   ir_remote_.clear();
@@ -184,8 +175,7 @@ esp_err_t SmartLightWeb::handleRecord(httpd_req_t* req) {
     led_.blinkOnce(RgbLed::Color::Red, kIrResultIndicatorMs);
     showStatus("赤外線信号を受信できませんでした。もう一度お試しください。",
                true);
-    redirectRoot(req);
-    return ESP_OK;
+    return respondMutation(req);
   }
 
   const auto ir_data = ir_remote_.get();
@@ -205,8 +195,7 @@ esp_err_t SmartLightWeb::handleRecord(httpd_req_t* req) {
   }
   led_.blinkOnce(RgbLed::Color::Green, kIrResultIndicatorMs);
   showStatus(recorded_button + "ボタンの赤外線信号を記録しました。");
-  redirectRoot(req);
-  return ESP_OK;
+  return respondMutation(req);
 }
 
 esp_err_t SmartLightWeb::handleAction(httpd_req_t* req) {
@@ -219,32 +208,51 @@ esp_err_t SmartLightWeb::handleAction(httpd_req_t* req) {
   if (state != "on" && state != "off") {
     LOGW("[Web] action rejected: state must be on/off, got '%s'",
         state.c_str());
-    redirectRoot(req);
-    return ESP_OK;
+    showStatus("操作内容が不正です。", true);
+    return respondMutation(req);
   }
 
-  if (target == "light") {
-    requested_light_state_.request(enabled);
-    redirectRoot(req);
-    return ESP_OK;
-  }
-  if (target == "switch") {
-    requested_switch_state_.request(enabled);
-    redirectRoot(req);
-    return ESP_OK;
-  }
-  if (target == "night") {
-    requested_night_state_.request(enabled);
-    redirectRoot(req);
-    return ESP_OK;
+  if (target == "light" || target == "switch" || target == "night") {
+    {
+      Lock lock(mutex_);
+      if (action_in_progress_) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        return httpd_resp_sendstr(req, "Previous action is still running");
+      }
+      action_in_progress_ = true;
+      if (target == "light") {
+        requested_light_state_.request(enabled);
+      } else if (target == "switch") {
+        requested_switch_state_.request(enabled);
+      } else {
+        requested_night_state_.request(enabled);
+      }
+    }
+    // Do not return a page until the controller has committed IR output and
+    // published all linked states. Never hold the mutex while sleeping.
+    const int64_t deadline = esp_timer_get_time() + 5000000;
+    while (true) {
+      bool complete;
+      {
+        Lock lock(mutex_);
+        complete = !action_in_progress_;
+      }
+      if (complete) {
+        return respondMutation(req);
+      }
+      if (esp_timer_get_time() >= deadline) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        return httpd_resp_sendstr(req, "Action result is not available yet");
+      }
+      vTaskDelay(pdMS_TO_TICKS(10));
+    }
   }
   if (target == "ambient") {
     { Lock lock(mutex_); settings_.ambient_light_mode_enabled = enabled; }
     settings_store_.saveAmbientLightModeEnabled(enabled);
     showStatus(std::string("明るさ連動を") +
                (enabled ? "オン" : "オフ") + "にしました。");
-    redirectRoot(req);
-    return ESP_OK;
+    return respondMutation(req);
   }
   if (target == "night_feature") {
     { Lock lock(mutex_); settings_.night_light_feature_enabled = enabled; }
@@ -255,99 +263,82 @@ esp_err_t SmartLightWeb::handleAction(httpd_req_t* req) {
     {
       Lock lock(mutex_);
       reboot_requested_ = true;
+      reboot_after_us_ = esp_timer_get_time() + 500000;
     }
-    sendPage(req);
-    return ESP_OK;
+    return respondMutation(req);
+  }
+  showStatus("操作対象が不正です。", true);
+  return respondMutation(req);
+}
+
+esp_err_t SmartLightWeb::respondMutation(httpd_req_t* req) {
+  if (requestHeader(req, "Accept").find("application/json") != std::string::npos) {
+    return sendState(req);
   }
   redirectRoot(req);
   return ESP_OK;
 }
 
-void SmartLightWeb::sendPage(httpd_req_t* req) {
-  const std::string page = buildPage();
-  httpd_resp_set_type(req, "text/html");
-  httpd_resp_send(req, page.c_str(), page.length());
-  Lock lock(mutex_);
-  status_message_.clear();
-  status_is_error_ = false;
+esp_err_t SmartLightWeb::sendPage(httpd_req_t* req) {
+  // Compression is done at build time: send flash-resident bytes directly.
+  const std::string accept = requestHeader(req, "Accept-Encoding");
+  const bool gzip = web_asset::quality(accept, "gzip") > 0;
+  if (!gzip && web_asset::quality(accept, "identity") == 0) {
+    httpd_resp_set_status(req, "406 Not Acceptable");
+    return httpd_resp_sendstr(req, "No supported content encoding");
+  }
+  const char* etag = gzip ? kWebGzipEtag : kWebIdentityEtag;
+  const bool unchanged = web_asset::etagMatches(requestHeader(req, "If-None-Match"), etag);
+  httpd_resp_set_type(req, "text/html; charset=utf-8");
+  httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
+  // Revalidate the static shell after firmware updates; state is never cached.
+  httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+  httpd_resp_set_hdr(req, "ETag", etag);
+  if (gzip) httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+  if (unchanged) {
+    httpd_resp_set_status(req, "304 Not Modified");
+    return httpd_resp_send(req, nullptr, 0);
+  }
+  return httpd_resp_send(req,
+      reinterpret_cast<const char*>(gzip ? kWebGzip : kWebIdentity),
+      gzip ? sizeof(kWebGzip) : sizeof(kWebIdentity));
 }
 
-std::string SmartLightWeb::buildPage() const {
-  std::string html(kWebPageTemplate);
-  html.reserve(html.length() + 512);
-
-  replaceTemplateValue(html, "{{PREVIEW_NOTICE}}", "");
-  replaceTemplateValue(html, "{{SETTINGS_OPEN}}", "");
-
-  bool observed_light_state, observed_switch_state, observed_night_state,
-      reboot_requested;
-  int observed_ambient_light_percent;
-  std::string status_message;
-  bool status_is_error;
-  // Snapshot settings_ here too: it's shared with the main app task, and
-  // this whole method otherwise reads it without synchronization.
-  SmartLightSettings settings;
+esp_err_t SmartLightWeb::sendState(httpd_req_t* req) {
+  cJSON* state = cJSON_CreateObject();
+  if (!state) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+  std::string message;
+  bool ok = true;
   {
     Lock lock(mutex_);
-    observed_light_state = observed_light_state_;
-    observed_switch_state = observed_switch_state_;
-    observed_night_state = observed_night_state_;
-    reboot_requested = reboot_requested_;
-    observed_ambient_light_percent = observed_ambient_light_percent_;
-    status_message = status_message_;
-    status_is_error = status_is_error_;
-    settings = settings_;
+    message = status_message_;
+    ok &= cJSON_AddBoolToObject(state, "light", observed_light_state_) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "switch", observed_switch_state_) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "night", observed_night_state_) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "ambient", settings_.ambient_light_mode_enabled) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "night_feature", settings_.night_light_feature_enabled) != nullptr;
+    ok &= cJSON_AddNumberToObject(state, "ambient_value", observed_ambient_light_percent_) != nullptr;
+    ok &= cJSON_AddStringToObject(state, "device_name", settings_.device_name.c_str()) != nullptr;
+    ok &= cJSON_AddStringToObject(state, "hostname", settings_.hostname.c_str()) != nullptr;
+    ok &= cJSON_AddNumberToObject(state, "timeout", settings_.light_off_timeout_seconds) != nullptr;
+    ok &= cJSON_AddNumberToObject(state, "ambient_threshold", settings_.ambient_light_threshold_percent) != nullptr;
+    ok &= cJSON_AddStringToObject(state, "message", message.c_str()) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "error", status_is_error_) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "reboot", reboot_requested_) != nullptr;
   }
-
-  std::string status_notice;
-  if (!status_message.empty()) {
-    status_notice = "<div class=\"status ";
-    status_notice += status_is_error ? "error" : "success";
-    status_notice += "\">";
-    status_notice += status_message;
-    status_notice += "</div>";
+  char* json = ok ? cJSON_PrintUnformatted(state) : nullptr;
+  cJSON_Delete(state);
+  if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+  httpd_resp_set_type(req, "application/json; charset=utf-8");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+  const esp_err_t result = httpd_resp_sendstr(req, json);
+  cJSON_free(json);
+  if (result == ESP_OK) {
+    Lock lock(mutex_);
+    if (status_message_ == message) {
+      status_message_.clear();
+      status_is_error_ = false;
+    }
   }
-  replaceTemplateValue(html, "{{STATUS_NOTICE}}", status_notice);
-
-  replaceToggleValues(html, "{{LIGHT_ACTION}}", "{{LIGHT_CLASS}}",
-                      "{{LIGHT_STATE}}", observed_light_state);
-  replaceToggleValues(html, "{{SWITCH_ACTION}}", "{{SWITCH_CLASS}}",
-                      "{{SWITCH_STATE}}", observed_switch_state);
-
-  if (settings.night_light_feature_enabled) {
-    replaceTemplateValue(html, "{{NIGHT_CONTROL}}",
-                         buildNightControl(observed_night_state));
-    replaceTemplateValue(
-        html, "{{NIGHT_RECORD_BUTTON}}",
-        "<button class=\"warn\" name=\"target\" value=\"night\">常夜灯ボタンを記録</button>");
-  } else {
-    replaceTemplateValue(html, "{{NIGHT_CONTROL}}", "");
-    replaceTemplateValue(html, "{{NIGHT_RECORD_BUTTON}}", "");
-  }
-
-  replaceTemplateValue(html, "{{AMBIENT_VALUE}}",
-                       std::to_string(observed_ambient_light_percent));
-  replaceToggleValues(html, "{{AMBIENT_ACTION}}",
-                      "{{AMBIENT_STATUS_CLASS}}",
-                      "{{AMBIENT_STATUS_STATE}}",
-                      settings.ambient_light_mode_enabled);
-  replaceTemplateValue(html, "{{REBOOT_NOTICE}}",
-                       reboot_requested
-                           ? "<div class=\"notice\">再起動しています。数秒待ってからページを再読み込みしてください。</div>"
-                           : "");
-  replaceTemplateValue(html, "{{DEVICE_NAME}}",
-                       escapeHtml(settings.device_name.c_str()));
-  replaceTemplateValue(html, "{{HOSTNAME}}",
-                       escapeHtml(settings.hostname.c_str()));
-  replaceTemplateValue(html, "{{TIMEOUT}}",
-                       std::to_string(settings.light_off_timeout_seconds));
-  replaceTemplateValue(
-      html, "{{AMBIENT_THRESHOLD}}",
-      std::to_string(settings.ambient_light_threshold_percent));
-  replaceToggleValues(html, "{{NIGHT_FEATURE_ACTION}}",
-                      "{{NIGHT_FEATURE_CLASS}}",
-                      "{{NIGHT_FEATURE_STATE}}",
-                      settings.night_light_feature_enabled, "有効", "無効");
-
-  return html;
+  return result;
 }

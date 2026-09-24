@@ -31,6 +31,7 @@ class SmartLightWeb {
         led_(led) {}
 
   void begin();
+  void completeAction();
   httpd_handle_t rawHandle() const { return server_; }
 
   void setObservedStates(bool light_state, bool switch_state, bool night_state,
@@ -69,6 +70,7 @@ class SmartLightWeb {
   RgbLed& led_;
   httpd_handle_t server_ = nullptr;
 
+  bool action_in_progress_ = false;
   bool hostname_updated_ = false;
   bool observed_light_state_ = false;
   bool observed_switch_state_ = false;
@@ -78,6 +80,7 @@ class SmartLightWeb {
   PendingState requested_switch_state_;
   PendingState requested_night_state_;
   bool reboot_requested_ = false;
+  int64_t reboot_after_us_ = 0;
   std::string status_message_;
   bool status_is_error_ = false;
 
@@ -85,9 +88,13 @@ class SmartLightWeb {
   esp_err_t handleSaveSettings(httpd_req_t* req);
   esp_err_t handleRecord(httpd_req_t* req);
   esp_err_t handleAction(httpd_req_t* req);
-  void sendPage(httpd_req_t* req);
-  std::string buildPage() const;
+  esp_err_t sendPage(httpd_req_t* req);
+  esp_err_t sendState(httpd_req_t* req);
+  esp_err_t respondMutation(httpd_req_t* req);
 
+  static esp_err_t handleStateTrampoline(httpd_req_t* req) {
+    return static_cast<SmartLightWeb*>(req->user_ctx)->sendState(req);
+  }
   static esp_err_t handleRootTrampoline(httpd_req_t* req) {
     return static_cast<SmartLightWeb*>(req->user_ctx)->handleRoot(req);
   }

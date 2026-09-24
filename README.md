@@ -186,7 +186,10 @@ cd firmware
 idf set-target esp32c6 # ESP32-C6 の場合
 idf set-target esp32s3 # ESP32-S3 の場合
 
-# build
+# Web UI minifier (ESP-IDFのPython環境で初回のみ)
+python -m pip install -r tools/web/requirements.txt
+
+# build: HTML/CSS/JSの最小化とgzip圧縮も自動実行
 idf build
 
 # flash and monitor

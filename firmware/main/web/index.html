@@ -1,14 +1,15 @@
-R"HTML(<!doctype html>
+<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" media="(prefers-color-scheme: light)" href="https://api.iconify.design/mdi/ceiling-light.svg?color=%23000000">
   <link rel="icon" media="(prefers-color-scheme: dark)" href="https://api.iconify.design/mdi/ceiling-light.svg?color=%23ffffff">
-  <title>{{DEVICE_NAME}}</title>
+  <title>スマートライト</title>
   <style>
     :root{--panel:#fff;--line:#dbe3ef;--ink:#17212b;--muted:#64748b;--accent:#2563eb;--good:#166534;--bad:#991b1b;--shadow:0 10px 30px rgba(15,23,42,.08)}
     *{box-sizing:border-box}
+    [hidden]{display:none!important}
     body{margin:0;background:linear-gradient(180deg,#f8fbff,#eef3f9);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
     main{max-width:720px;margin:0 auto;padding:24px 16px 40px}
     .hero,.fold{overflow:hidden;border:1px solid var(--line);border-radius:20px;background:var(--panel);box-shadow:var(--shadow)}
@@ -35,6 +36,8 @@ R"HTML(<!doctype html>
     input[type=range]{width:100%;accent-color:var(--accent)}
     button{border:0;border-radius:12px;padding:14px 18px;background:var(--accent);color:#fff;font:700 15px system-ui;cursor:pointer}
     button.warn{background:#0f172a}.group{display:flex;flex-wrap:wrap;gap:10px}
+    button.pending,button.toggle-btn.pending{background:#ffedd5;color:#9a3412;cursor:wait}
+    button:disabled{cursor:wait}
     .save-row{padding:16px;border:1px solid #bfdbfe;border-radius:14px;background:#eff6ff}.save-row .mini{margin:0;color:#1e40af}.save-row button{min-width:150px}
     .device-section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
     .ir-section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
@@ -46,10 +49,11 @@ R"HTML(<!doctype html>
   </style>
 </head>
 <body>
-  <main>
-    {{PREVIEW_NOTICE}}
+  <noscript><div class="notice">この画面の操作にはJavaScriptを有効にしてください。</div></noscript>
+  <main aria-busy="true">
+    <div id="preview" class="notice" hidden>PC確認用プレビューです。操作しても実機の設定は変更されません。</div>
     <section class="hero">
-      <h1><a href="/" style="color:inherit;text-decoration:none">{{DEVICE_NAME}}</a></h1>
+      <h1><a id="device-name" href="/" style="color:inherit;text-decoration:none">スマートライト</a></h1>
       <div class="topbar">
         <section class="card">
           <div class="control-grid">
@@ -57,19 +61,26 @@ R"HTML(<!doctype html>
               <span class="label">照明</span>
               <form class="toggle-form" method="post" action="/action">
                 <input type="hidden" name="target" value="light">
-                <input type="hidden" name="state" value="{{LIGHT_ACTION}}">
-                <button class="toggle-btn {{LIGHT_CLASS}}">{{LIGHT_STATE}}</button>
+                <input type="hidden" name="state" value="">
+                <button disabled class="toggle-btn pending">読込中…</button>
               </form>
             </div>
             <div class="control-item">
               <span class="label">人感センサ連動</span>
               <form class="toggle-form" method="post" action="/action">
                 <input type="hidden" name="target" value="switch">
-                <input type="hidden" name="state" value="{{SWITCH_ACTION}}">
-                <button class="toggle-btn {{SWITCH_CLASS}}">{{SWITCH_STATE}}</button>
+                <input type="hidden" name="state" value="">
+                <button disabled class="toggle-btn pending">読込中…</button>
               </form>
             </div>
-            {{NIGHT_CONTROL}}
+            <div id="night-control" class="control-item" hidden>
+              <span class="label">常夜灯</span>
+              <form class="toggle-form" method="post" action="/action">
+                <input type="hidden" name="target" value="night">
+                <input type="hidden" name="state" value="">
+                <button disabled class="toggle-btn pending">読込中…</button>
+              </form>
+            </div>
           </div>
         </section>
         <div class="stat">
@@ -77,20 +88,20 @@ R"HTML(<!doctype html>
           <div class="ambient-row">
             <form class="toggle-form" method="post" action="/action">
               <input type="hidden" name="target" value="ambient">
-              <input type="hidden" name="state" value="{{AMBIENT_ACTION}}">
-              <button class="toggle-btn {{AMBIENT_STATUS_CLASS}}">{{AMBIENT_STATUS_STATE}}</button>
+              <input type="hidden" name="state" value="">
+              <button disabled class="toggle-btn pending">読込中…</button>
             </form>
-            <div class="value">{{AMBIENT_VALUE}}%</div>
+            <div class="value"><span id="ambient-value">—</span>%</div>
           </div>
         </div>
       </div>
     </section>
 
-    {{REBOOT_NOTICE}}
-    {{STATUS_NOTICE}}
+    <div id="reboot" class="notice" hidden>再起動しています。数秒待ってからページを再読み込みしてください。</div>
+    <div id="status" class="status" role="status" hidden></div>
 
     <div class="two-col">
-      <details class="fold" {{SETTINGS_OPEN}}>
+      <details class="fold" >
         <summary>設定<span>タップして開閉</span></summary>
         <div class="body">
           <form class="stack" method="post" action="/settings">
@@ -101,31 +112,31 @@ R"HTML(<!doctype html>
             <div class="settings-grid">
               <label class="field setting-card wide">
                 <span>デバイス名</span>
-                <input name="device_name" type="text" maxlength="64" required value="{{DEVICE_NAME}}">
+                <input name="device_name" type="text" maxlength="64" required value="スマートライト">
                 <span class="mini">タイトルとブラウザのタブに表示されます。</span>
               </label>
               <label class="field setting-card">
                 <span>ホスト名</span>
-                <input name="hostname" value="{{HOSTNAME}}">
+                <input name="hostname" value="">
                 <span class="mini">この画面は<strong>http://&lt;ホスト名&gt;.local</strong>でアクセスできます。</span>
               </label>
               <label class="field setting-card">
                 <span>自動消灯時間（秒）</span>
-                <input name="timeout" type="number" min="1" inputmode="numeric" value="{{TIMEOUT}}">
+                <input name="timeout" type="number" min="1" inputmode="numeric" value="">
                 <span class="mini">人感センサ連動がオンの場合、この時間非検出が続いた場合に自動消灯します。</span>
               </label>
               <div class="field setting-card wide">
                 <span>明るさ連動の閾値</span>
                 <span class="mini">明るさ連動がオンの場合、この値を基準に明るさを判定します。</span>
                 <div class="range-row">
-                  <input id="threshold" name="ambient_threshold" type="range" min="0" max="100" value="{{AMBIENT_THRESHOLD}}" oninput="thresholdValue.textContent=this.value">
-                  <strong><span id="thresholdValue">{{AMBIENT_THRESHOLD}}</span>%</strong>
+                  <input id="threshold" name="ambient_threshold" type="range" min="0" max="100" value="" oninput="thresholdValue.textContent=this.value">
+                  <strong><span id="thresholdValue"></span>%</strong>
                 </div>
               </div>
             </div>
             <div class="row save-row">
               <p class="mini">デバイス名、ホスト名、自動消灯時間、明るさ連動の閾値をまとめて保存します。</p>
-              <button>設定を保存</button>
+              <button disabled>設定を保存</button>
             </div>
           </form>
           <div class="device-section">
@@ -136,8 +147,8 @@ R"HTML(<!doctype html>
               </div>
               <form class="toggle-form" method="post" action="/action">
                 <input type="hidden" name="target" value="night_feature">
-                <input type="hidden" name="state" value="{{NIGHT_FEATURE_ACTION}}">
-                <button class="toggle-btn {{NIGHT_FEATURE_CLASS}}">{{NIGHT_FEATURE_STATE}}</button>
+                <input type="hidden" name="state" value="">
+                <button disabled class="toggle-btn pending">読込中…</button>
               </form>
             </div>
           </div>
@@ -147,14 +158,129 @@ R"HTML(<!doctype html>
               <p class="section-description">記録するボタンを押し、10秒以内にリモコンの信号を送信してください。</p>
             </div>
             <form class="group" method="post" action="/record">
-              <button class="warn" name="target" value="on">点灯ボタンを記録</button>
-              <button class="warn" name="target" value="off">消灯ボタンを記録</button>
-              {{NIGHT_RECORD_BUTTON}}
+              <button disabled class="warn" name="target" value="on">点灯ボタンを記録</button>
+              <button disabled class="warn" name="target" value="off">消灯ボタンを記録</button>
+              <button disabled id="night-record" class="warn" name="target" value="night" hidden>常夜灯ボタンを記録</button>
             </form>
           </div>
         </div>
       </details>
     </div>
   </main>
+<script>
+(() => {
+  let submitting = true;
+  const get = (id) => document.getElementById(id);
+  const buttons = () => document.querySelectorAll('button');
+  const labels = new Map(Array.from(buttons(), (button) => [button, button.textContent]));
+  const notice = (message, error = false) => {
+    const status = get('status');
+    status.textContent = message;
+    status.className = 'status ' + (error ? 'error' : 'success');
+    status.hidden = !message;
+  };
+
+  function render(state) {
+    for (const key of ['light', 'switch', 'night', 'ambient', 'night_feature', 'error', 'reboot']) {
+      if (typeof state[key] !== 'boolean') throw new Error('Invalid state');
+    }
+    for (const key of ['device_name', 'hostname', 'message']) {
+      if (typeof state[key] !== 'string') throw new Error('Invalid state');
+    }
+    for (const key of ['timeout', 'ambient_threshold', 'ambient_value']) {
+      if (!Number.isFinite(state[key])) throw new Error('Invalid state');
+    }
+    buttons().forEach((button) => {
+      button.classList.remove('pending');
+      button.removeAttribute('aria-busy');
+      button.textContent = labels.get(button);
+      button.disabled = !!state.reboot;
+    });
+    document.querySelectorAll('.toggle-form').forEach((form) => {
+      const target = form.elements.target.value;
+      const enabled = state[target];
+      const button = form.querySelector('button');
+      form.elements.state.value = enabled ? 'off' : 'on';
+      button.classList.toggle('on', enabled);
+      button.classList.toggle('off', !enabled);
+      button.textContent = target === 'night_feature'
+        ? (enabled ? '有効' : '無効') : (enabled ? 'オン' : 'オフ');
+    });
+    document.title = state.device_name;
+    get('device-name').textContent = state.device_name;
+    const settings = document.querySelector('form[action="/settings"]');
+    for (const key of ['device_name', 'hostname', 'timeout', 'ambient_threshold']) {
+      settings.elements[key].value = state[key];
+    }
+    get('thresholdValue').textContent = state.ambient_threshold;
+    get('ambient-value').textContent = state.ambient_value;
+    get('night-control').hidden = !state.night_feature;
+    get('night-record').hidden = !state.night_feature;
+    get('preview').hidden = !state.preview;
+    get('reboot').hidden = !state.reboot;
+    notice(state.message, state.error);
+    document.querySelector('main').removeAttribute('aria-busy');
+    submitting = !!state.reboot;
+  }
+
+  async function request(url, options = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(url, {
+        ...options, headers: {Accept: 'application/json'},
+        signal: controller.signal, cache: 'no-store'
+      });
+      if (!response.ok) throw new Error('Request failed');
+      return await response.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  document.addEventListener('submit', async (event) => {
+    const form = event.target;
+    if (form.method.toLowerCase() !== 'post') return;
+    event.preventDefault();
+    if (submitting) return;
+    submitting = true;
+    const data = new FormData(form);
+    const button = event.submitter;
+    if (button && button.name) data.append(button.name, button.value);
+    buttons().forEach((item) => { item.disabled = true; });
+    const linked = form.getAttribute('action') === '/action' &&
+      ['light', 'switch', 'night'].includes(data.get('target'));
+    const pending = linked
+      ? Array.from(document.querySelectorAll('.control-grid button'))
+      : [button].filter(Boolean);
+    pending.forEach((item) => {
+      item.classList.add('pending');
+      item.textContent = '送信中…';
+      item.setAttribute('aria-busy', 'true');
+    });
+    notice('');
+    try {
+      render(await request(form.action, {method: 'POST', body: new URLSearchParams(data)}));
+    } catch (error) {
+      // A lost response does not mean the operation failed. Never resend it
+      // automatically or restore the pre-operation state as if it were current.
+      pending.forEach((item) => {
+        item.textContent = '結果未確認';
+        item.removeAttribute('aria-busy');
+      });
+      notice('操作結果を確認できませんでした。ページを再読み込みして状態を確認してください。', true);
+    }
+  });
+  async function load() {
+    submitting = true;
+    buttons().forEach((button) => { button.disabled = true; });
+    try { render(await request('/state')); }
+    catch (error) { notice('状態を取得できませんでした。ページを再読み込みしてください。', true); }
+  }
+  // A browser back/forward-cache restore must also fetch fresh device state.
+  window.addEventListener('pageshow', (event) => { if (event.persisted) load(); });
+  load();
+})();
+</script>
 </body>
-</html>)HTML"
+</html>

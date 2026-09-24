@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass, replace
-from html import escape
+import hashlib
+import json
+import sys
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 
 FIRMWARE_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = FIRMWARE_ROOT / "main/smart_light_web_page.inc"
+TEMPLATE = FIRMWARE_ROOT / "main/web/index.html"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_web import build
 STATE_LOCK = Lock()
 
 
@@ -29,116 +34,46 @@ class PreviewState:
     settings_open: bool = False
 
 
-@dataclass(frozen=True)
-class ToggleValues:
-    action: str
-    css_class: str
-    label: str
-
-
 STATE = PreviewState()
 
 
-def toggle_values(
-    enabled: bool, on_text: str = "オン", off_text: str = "オフ"
-) -> ToggleValues:
-    return ToggleValues(
-        action="off" if enabled else "on",
-        css_class="on" if enabled else "off",
-        label=on_text if enabled else off_text,
-    )
+@lru_cache(maxsize=1)
+def assets(mtime):
+    return build(TEMPLATE)
 
 
-def status_notice(message: str, is_error: bool) -> str:
-    if not message:
-        return ""
-    kind = "error" if is_error else "success"
-    return f'<div class="status {kind}">{escape(message)}</div>'
-
-
-def night_control(enabled: bool) -> str:
-    values = toggle_values(enabled)
-    return (
-        '<div class="control-item"><span class="label">常夜灯</span>'
-        '<form class="toggle-form" method="post" action="/action">'
-        '<input type="hidden" name="target" value="night">'
-        f'<input type="hidden" name="state" value="{values.action}">'
-        f'<button class="toggle-btn {values.css_class}">'
-        f"{values.label}</button></form></div>"
-    )
-
-
-def read_template() -> str:
-    source = TEMPLATE.read_text(encoding="utf-8").strip()
-    prefix = 'R"HTML('
-    suffix = ')HTML"'
-    if not source.startswith(prefix) or not source.endswith(suffix):
-        raise RuntimeError(f"Unexpected template format: {TEMPLATE}")
-    return source[len(prefix) : -len(suffix)]
-
-
-def consume_state() -> PreviewState:
+def state_json() -> bytes:
     with STATE_LOCK:
         state = replace(STATE)
         STATE.status_message = ""
         STATE.status_is_error = False
-        STATE.settings_open = False
-    return state
+    return json.dumps({
+        "light": state.light_enabled, "switch": state.switch_enabled,
+        "night": state.night_enabled, "ambient": state.ambient_enabled,
+        "night_feature": state.night_feature_enabled,
+        "ambient_value": 42, "device_name": state.device_name,
+        "hostname": state.hostname, "timeout": state.timeout,
+        "ambient_threshold": state.ambient_threshold,
+        "message": state.status_message, "error": state.status_is_error,
+        "reboot": False, "preview": True,
+    }, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
-def render() -> bytes:
-    state = consume_state()
-
-    light = toggle_values(state.light_enabled)
-    switch = toggle_values(state.switch_enabled)
-    night_feature = toggle_values(
-        state.night_feature_enabled, "有効", "無効"
-    )
-    values = {
-        "{{DEVICE_NAME}}": escape(state.device_name, quote=True),
-        "{{PREVIEW_NOTICE}}": (
-            '<div class="notice" style="margin-top:0;margin-bottom:14px;'
-            'border-color:#93c5fd;background:#eff6ff;color:#1e40af">'
-            "PC確認用プレビューです。操作しても実機の設定は変更されません。</div>"
-        ),
-        "{{SETTINGS_OPEN}}": "open" if state.settings_open else "",
-        "{{LIGHT_ACTION}}": light.action,
-        "{{LIGHT_CLASS}}": light.css_class,
-        "{{LIGHT_STATE}}": light.label,
-        "{{SWITCH_ACTION}}": switch.action,
-        "{{SWITCH_CLASS}}": switch.css_class,
-        "{{SWITCH_STATE}}": switch.label,
-        "{{NIGHT_CONTROL}}": (
-            night_control(state.night_enabled)
-            if state.night_feature_enabled
-            else ""
-        ),
-        "{{AMBIENT_VALUE}}": "42",
-        "{{AMBIENT_STATUS_CLASS}}": "on" if state.ambient_enabled else "off",
-        "{{AMBIENT_STATUS_STATE}}": "オン" if state.ambient_enabled else "オフ",
-        "{{AMBIENT_ACTION}}": "off" if state.ambient_enabled else "on",
-        "{{REBOOT_NOTICE}}": "",
-        "{{STATUS_NOTICE}}": status_notice(
-            state.status_message, state.status_is_error
-        ),
-        "{{HOSTNAME}}": escape(state.hostname, quote=True),
-        "{{TIMEOUT}}": str(state.timeout),
-        "{{AMBIENT_THRESHOLD}}": str(state.ambient_threshold),
-        "{{NIGHT_FEATURE_ACTION}}": night_feature.action,
-        "{{NIGHT_FEATURE_CLASS}}": night_feature.css_class,
-        "{{NIGHT_FEATURE_STATE}}": night_feature.label,
-        "{{NIGHT_RECORD_BUTTON}}": (
-            '<button class="warn" name="target" value="night">'
-            "常夜灯ボタンを記録</button>"
-            if state.night_feature_enabled
-            else ""
-        ),
-    }
-
-    html = read_template()
-    for key, value in values.items():
-        html = html.replace(key, value)
-    return html.encode("utf-8")
+def encoding_quality(header, coding):
+    qualities = {}
+    for item in header.split(","):
+        name, _, parameter = item.strip().partition(";")
+        q = 1.0
+        if parameter:
+            try:
+                q = float(parameter.strip().removeprefix("q="))
+                if not 0 <= q <= 1: q = 0.0
+            except ValueError:
+                q = 0.0
+        qualities[name.lower()] = q
+    if coding in qualities: return qualities[coding]
+    if coding == "identity": return 0 if qualities.get("*") == 0 else 1
+    return qualities.get("*", 0)
 
 
 def set_status(message: str, is_error: bool = False, open_settings: bool = True):
@@ -196,25 +131,44 @@ def action_status(target: str, enabled: bool, direct_state, final_state) -> str:
 
 class PreviewHandler(BaseHTTPRequestHandler):
     def send_html(self):
-        try:
-            content = render()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(content)))
-            self.end_headers()
-            self.wfile.write(content)
-        except Exception as error:
-            content = str(error).encode("utf-8")
-            self.send_response(500)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(content)))
-            self.end_headers()
-            self.wfile.write(content)
-
-    def redirect_root(self):
-        self.send_response(303)
-        self.send_header("Location", "/")
+        plain, compressed = assets(TEMPLATE.stat().st_mtime_ns)
+        header = self.headers.get("Accept-Encoding", "")
+        gzip = encoding_quality(header, "gzip") > 0
+        if not gzip and encoding_quality(header, "identity") == 0:
+            self.send_error(406)
+            return
+        content = compressed if gzip else plain
+        etag = '"' + hashlib.sha256(content).hexdigest()[:24] + '"'
+        matches = [item.strip().removeprefix("W/") for item in
+                   self.headers.get("If-None-Match", "").split(",")]
+        unchanged = etag in matches or "*" in matches
+        self.send_response(304 if unchanged else 200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Vary", "Accept-Encoding")
+        self.send_header("ETag", etag)
+        if gzip: self.send_header("Content-Encoding", "gzip")
+        if not unchanged: self.send_header("Content-Length", str(len(content)))
         self.end_headers()
+        if not unchanged: self.wfile.write(content)
+
+    def send_state(self):
+        content = state_json()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    def respond_mutation(self):
+        if "application/json" in self.headers.get("Accept", ""):
+            self.send_state()
+        else:
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
     def read_form(self):
         length = int(self.headers.get("Content-Length", "0"))
@@ -222,7 +176,10 @@ class PreviewHandler(BaseHTTPRequestHandler):
         return parse_qs(body, keep_blank_values=True)
 
     def do_GET(self):
-        self.send_html()
+        path = urlsplit(self.path).path
+        if path == "/": self.send_html()
+        elif path == "/state": self.send_state()
+        else: self.send_error(404)
 
     def do_POST(self):
         form = self.read_form()
@@ -235,7 +192,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 self.handle_record(form)
             else:
                 set_status("不明な操作です。", True)
-        self.redirect_root()
+        self.respond_mutation()
 
     def handle_settings(self, form):
         device_name = form.get("device_name", [""])[0].strip()
