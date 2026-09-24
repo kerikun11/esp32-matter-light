@@ -50,9 +50,12 @@ class SmartLightController {
   uint32_t mdns_ipv4_address_ = 0;
   unsigned long last_mdns_sync_attempt_ms_ = 0;
   esp_err_t last_mdns_error_ = ESP_OK;
+  bool wifi_ps_disabled_ = false;
+  unsigned long last_wifi_ps_attempt_ms_ = 0;
   void setupOta();
   void syncHostnames_();
   void syncAdditionalMdnsHostname_(bool force);
+  void syncWifiPowerSave_();
   SmartLightRuntimeState buildRuntimeState_() const;
   void commitOutputs_(const SmartLightRuntimeState& state);
   void sendIrSignal_(const IRRemote::IRData& data, const char* label);

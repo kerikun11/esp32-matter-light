@@ -32,9 +32,6 @@ void SmartLightController::begin() {
   last_night_state_ = false;
   matter_light_.begin(last_light_state_, last_switch_state_, last_night_state_,
                       settings_.night_light_feature_enabled);
-  if (esp_wifi_set_ps(WIFI_PS_NONE) != ESP_OK) {
-    LOGW("[Wi-Fi] Failed to disable power save");
-  }
 
   setupOta();
   web_.begin();
@@ -42,6 +39,8 @@ void SmartLightController::begin() {
 
 void SmartLightController::handle() {
   ArduinoOTA.handle();
+
+  syncWifiPowerSave_();
 
   btn_.update();
   led_.update();
@@ -105,6 +104,21 @@ void SmartLightController::setupOta() {
     LOGI("[OTA] Error: %s (%d)", ota_error_name(error), error);
   });
   ArduinoOTA.begin();
+}
+
+void SmartLightController::syncWifiPowerSave_() {
+  if (wifi_ps_disabled_) return;
+  constexpr unsigned long kRetryIntervalMs = 1000;
+  const unsigned long now = millis();
+  if (now - last_wifi_ps_attempt_ms_ < kRetryIntervalMs) return;
+  last_wifi_ps_attempt_ms_ = now;
+
+  // Right after begin(), the Wi-Fi driver may not be started yet (Matter
+  // brings it up asynchronously), so this can transiently fail; retry until
+  // the driver is ready instead of giving up after a single attempt.
+  if (esp_wifi_set_ps(WIFI_PS_NONE) == ESP_OK) {
+    wifi_ps_disabled_ = true;
+  }
 }
 
 void SmartLightController::syncHostnames_() {
