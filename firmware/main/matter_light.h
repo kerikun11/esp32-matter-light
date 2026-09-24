@@ -67,9 +67,9 @@ class MatterLight {
 
     // Plugin endpoint (switch)
     {
-      esp_matter::endpoint::on_off_plugin_unit::config_t cfg{};
+      esp_matter::endpoint::on_off_plug_in_unit::config_t cfg{};
       cfg.on_off.on_off = initial_switch_on;
-      ep_plugin_ = esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg,
+      ep_plugin_ = esp_matter::endpoint::on_off_plug_in_unit::create(node_, &cfg,
                                                                     0, this);
       if (!ep_plugin_ || !setOnOffAttr_(ep_plugin_, initial_switch_on)) {
         ESP_LOGE(TAG, "plugin::create failed");
@@ -79,10 +79,10 @@ class MatterLight {
 
     // Plugin endpoint (night) - only when feature is enabled
     if (enable_night_endpoint) {
-      esp_matter::endpoint::on_off_plugin_unit::config_t cfg{};
+      esp_matter::endpoint::on_off_plug_in_unit::config_t cfg{};
       cfg.on_off.on_off = initial_night_on;
       ep_night_ =
-          esp_matter::endpoint::on_off_plugin_unit::create(node_, &cfg, 0, this);
+          esp_matter::endpoint::on_off_plug_in_unit::create(node_, &cfg, 0, this);
       if (!ep_night_ || !setOnOffAttr_(ep_night_, initial_night_on)) {
         ESP_LOGE(TAG, "night::create failed");
         return false;
@@ -187,7 +187,11 @@ class MatterLight {
         cluster, chip::app::Clusters::OnOff::Attributes::OnOff::Id);
     if (!attr) return false;
     esp_matter_attr_val_t v = esp_matter_bool(on);
-    return esp_matter::attribute::set_val(attr, &v) == ESP_OK;
+    // set_val() returns ESP_ERR_NOT_FINISHED (not ESP_OK) when the value is
+    // already what's being set (e.g. right after config_t already applied it
+    // at endpoint creation) -- that's not a failure.
+    esp_err_t err = esp_matter::attribute::set_val(attr, &v);
+    return err == ESP_OK || err == ESP_ERR_NOT_FINISHED;
   }
 
   bool readOnAttr_(esp_matter::endpoint_t *ep, bool &out) const {

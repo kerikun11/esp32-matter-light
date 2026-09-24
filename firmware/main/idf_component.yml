@@ -1,6 +1,10 @@
 # https://github.com/espressif/esp-idf
 dependencies:
   espressif/esp_matter: # https://github.com/espressif/esp-matter.git
-    version: ">=1.4.0"
+    # Pinned to the 1.5.x line: esp_matter >=1.6.0 renamed a ClosureControl header
+    # that arduino-esp32 3.3.x's Matter library still references by the old path
+    # (upstream fix landed only in the unreleased release/v4.0.x branch).
+    # See: https://github.com/espressif/arduino-esp32/issues/12851
+    version: ">=1.5.0,<1.6.0"
   espressif/arduino-esp32: # https://github.com/espressif/arduino-esp32.git
-    version: ">=3.3.10"
+    version: ">=3.3.12"
