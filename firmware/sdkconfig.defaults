@@ -2,7 +2,6 @@
 # CONFIG_LOG_DEFAULT_LEVEL_INFO=y # (default: info)
 # CONFIG_BOOTLOADER_LOG_LEVEL_ERROR=y (default: info)
 # CONFIG_BT_NIMBLE_LOG_LEVEL_INFO=y (default: info)
-CONFIG_ARDUHAL_LOG_DEFAULT_LEVEL_INFO=y # (default: error)
 CONFIG_CHIP_LOG_DEFAULT_LEVEL_ERROR=y # (default: progress)
 
 # Console Configuration
@@ -18,10 +17,15 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="config/partitions.csv"
 CONFIG_PARTITION_TABLE_OFFSET=0xC000
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 
-# Arduino Configuration
+# App Configuration
 CONFIG_FREERTOS_HZ=1000
-CONFIG_AUTOSTART_ARDUINO=y
-CONFIG_ARDUHAL_LOG_COLORS=y
+# app_main() itself now runs the app's main loop (previously arduino-esp32's
+# loopTask, which had an 8K stack), so it needs more than the 3.5K default.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+# Let the bootloader roll back to the previous OTA partition automatically if
+# a freshly-flashed image never confirms itself valid (crash loop, power loss
+# mid-boot, ...). See confirmOtaBootIfPending() in ota_service.cpp.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # Matter Configuration
 CONFIG_BT_ENABLED=y

@@ -4,14 +4,17 @@
  */
 #pragma once
 
-#include <Arduino.h>
-#include <ArduinoOTA.h>
+#include <esp_err.h>
+
+#include <cstdint>
+#include <string>
 
 #include "app_config.h"
 #include "brightness_sensor.h"
 #include "button.h"
 #include "command_parser.h"
 #include "ir_remote.h"
+#include "lockable.h"
 #include "matter_light.h"
 #include "motion_sensor.h"
 #include "rgb_led.h"
@@ -35,9 +38,12 @@ class SmartLightController {
   MotionSensor motion_sensor_{CONFIG_APP_PIN_MOTION_SENSOR};
   BrightnessSensor brightness_sensor_{CONFIG_APP_PIN_LIGHT_SENSOR};
   IRRemote ir_remote_;
-  CommandParser command_parser_{Serial};
+  CommandParser command_parser_;
   SmartLightSettingsStore settings_store_;
   SmartLightSettings settings_;
+  // Guards settings_ (and the IR data it carries), which is shared between
+  // this class (main app task) and web_ (esp_http_server's worker task).
+  Mutex settings_mutex_;
   MatterLight matter_light_;
   SmartLightCommandHandler command_handler_;
   SmartLightWeb web_;
@@ -48,11 +54,9 @@ class SmartLightController {
   bool last_occupancy_state_ = false;
   std::string mdns_hostname_;
   uint32_t mdns_ipv4_address_ = 0;
-  unsigned long last_mdns_sync_attempt_ms_ = 0;
+  int64_t last_mdns_sync_attempt_ms_ = 0;
   esp_err_t last_mdns_error_ = ESP_OK;
-  bool wifi_ps_disabled_ = false;
-  unsigned long last_wifi_ps_attempt_ms_ = 0;
-  void setupOta();
+  int64_t last_wifi_ps_attempt_ms_ = 0;
   void syncHostnames_();
   void syncAdditionalMdnsHostname_(bool force);
   void syncWifiPowerSave_();

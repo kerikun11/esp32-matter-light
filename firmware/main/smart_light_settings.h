@@ -4,12 +4,11 @@
  */
 #pragma once
 
-#include <Preferences.h>
-
 #include <string>
 
 #include "app_log.h"
 #include "ir_remote.h"
+#include "preferences.h"
 
 struct SmartLightSettings {
   static constexpr const char* kPrefNamespace = "matter";

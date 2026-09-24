@@ -3,77 +3,53 @@
  * @copyright 2025 Ryotaro Onuki
  */
 
-#if 1
+#include <esp_log.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <nvs_flash.h>
+
+#include <cstdio>
+
+#include "ota_service.h"
 #include "smart_light_controller.h"
+
+namespace {
+
+void initNvs() {
+  esp_err_t err = nvs_flash_init();
+  if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
+      err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    err = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(err);
+}
+
+}  // namespace
 
 SmartLightController app_;
 
-void setup() {
-  Serial.begin(CONFIG_MONITOR_BAUD);
-  app_.begin();
+extern "C" void app_main() {
+  // app_log.h writes with plain fprintf(stdout, ...); without this, stdout
+  // is fully buffered here (not line-buffered), so log lines can sit
+  // unflushed for a long time -- observed as [IR-Tx]/etc. lines from LOGx()
+  // going missing from a short serial-monitor capture even though the code
+  // that logs them did run.
+  setvbuf(stdout, nullptr, _IOLBF, 1024);
+
+  initNvs();
+  // As early as possible after a fresh OTA update, tell the bootloader the
+  // new image booted successfully so it won't roll back to the previous one.
+  confirmOtaBootIfPending();
 
   /* set log level */
   esp_log_level_set("esp_matter_attribute", ESP_LOG_WARN);
   esp_log_level_set("esp_matter_command", ESP_LOG_WARN);
   esp_log_level_set("ROUTE_HOOK", ESP_LOG_WARN);
-}
 
-void loop() {
-  app_.handle();
-  yield();
-}
-
-#else  // Matter Light Example
-
-#include <Arduino.h>
-
-#include "app_config.h"
-#include "app_log.h"
-#include "matter_light.h"
-#include "rgb_led.h"
-
-MatterLight matter_light_;
-RgbLed led_(CONFIG_APP_PIN_RGB_LED);
-
-void setup() {
-  Serial.begin(CONFIG_MONITOR_BAUD);
-  matter_light_.begin(true, true);
-  matter_light_.printOnboarding();
-}
-
-void loop() {
-  /* status */
-  if (!matter_light_.isCommissioned()) {
-    led_.setBackground(RgbLed::Color::Magenta);
-  } else if (!matter_light_.isConnected()) {
-    led_.setBackground(RgbLed::Color::Red);
-  } else {
-    led_.setBackground(RgbLed::Color::White);
+  app_.begin();
+  while (true) {
+    app_.handle();
+    vTaskDelay(1);
   }
-
-  /* event */
-  MatterLight::Event event;
-  if (matter_light_.getEvent(event, 0)) {
-    led_.blinkOnce(RgbLed::Color::Blue);
-    switch (event.type) {
-      case MatterLight::EventType::LightOn:
-        LOGI("[Event] Light ON");
-        break;
-      case MatterLight::EventType::LightOff:
-        LOGI("[Event] Light OFF");
-        break;
-      case MatterLight::EventType::SwitchOn:
-        LOGI("[Event] Switch ON");
-        break;
-      case MatterLight::EventType::SwitchOff:
-        LOGI("[Event] Switch OFF");
-        break;
-    }
-    LOGW("[Event] Light %s, Switch %s", event.light_state ? "ON" : "OFF",
-         event.switch_state ? "ON" : "OFF");
-  }
-
-  led_.update();
-  yield();
 }
-#endif

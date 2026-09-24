@@ -6,16 +6,20 @@
 #include "smart_light_controller.h"
 
 #include <esp_netif.h>
+#include <esp_system.h>
+#include <esp_timer.h>
 #include <esp_wifi.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <mdns.h>
 
 #include "app_log.h"
-#include "ota_utils.h"
+#include "ota_service.h"
 
 SmartLightController::SmartLightController()
     : command_handler_(command_parser_, settings_, settings_store_, ir_remote_,
                        brightness_sensor_),
-      web_(settings_, settings_store_, ir_remote_, led_) {}
+      web_(settings_, settings_mutex_, settings_store_, ir_remote_, led_) {}
 
 void SmartLightController::begin() {
   led_.setBackground(RgbLed::Color::Green);
@@ -33,26 +37,25 @@ void SmartLightController::begin() {
   matter_light_.begin(last_light_state_, last_switch_state_, last_night_state_,
                       settings_.night_light_feature_enabled);
 
-  setupOta();
   web_.begin();
+  registerOtaHandlers(web_.rawHandle());
 }
 
 void SmartLightController::handle() {
-  ArduinoOTA.handle();
-
   syncWifiPowerSave_();
 
   btn_.update();
   led_.update();
   motion_sensor_.update();
+
+  // Locked for the rest of this function: settings_ (read/written below,
+  // directly and via syncHostnames_()/command_handler_ and applyIrInput()/
+  // commitOutputs_()) is shared with web_'s HTTP worker task.
+  Lock lock(settings_mutex_);
   brightness_sensor_.update(
       static_cast<float>(settings_.ambient_light_threshold_percent) / 100.0f);
-  web_.setObservedStates(
-      last_light_state_, last_switch_state_, last_night_state_,
-      static_cast<int>(brightness_sensor_.getNormalized() * 100.0f + 0.5f));
-  web_.handle();
   if (web_.consumeRebootRequested()) {
-    ESP.restart();
+    esp_restart();
   }
   syncHostnames_();
 
@@ -78,47 +81,37 @@ void SmartLightController::handle() {
   reportWebAction_(web_action, web_requested_value, directly_requested_state,
                    state);
   commitOutputs_(state);
+  // Must come after commitOutputs_(): it can block for ~150ms sending an IR
+  // signal, and the web UI's toggle buttons render from these values, so
+  // publishing the PRE-commit state here would make the very redirect the
+  // browser follows right after POSTing /action show the OLD button state
+  // until the next handle() iteration (or the next manual reload) catches
+  // up -- this is what the "the button stays off until I reload" bug was.
+  web_.setObservedStates(
+      state.light_state, state.switch_state, state.night_state,
+      static_cast<int>(brightness_sensor_.getNormalized() * 100.0f + 0.5f));
   updateOccupancyLog(state.occupancy_state);
   updateStatusLed(state);
   handleDecommission();
 }
 
-void SmartLightController::setupOta() {
-  ArduinoOTA.setHostname(settings_.hostname.c_str());
-  ArduinoOTA.setMdnsEnabled(false);
-  ArduinoOTA.setTimeout(10000);  // 10s per chunk × 3 retries = 30s max stall
-  ArduinoOTA.onStart([]() {
-    esp_wifi_set_ps(WIFI_PS_NONE);
-    esp_wifi_set_max_tx_power(78);  // 78 * 0.25 = 19.5 dBm
-    auto cmd = ArduinoOTA.getCommand();
-    LOGI("[OTA] Start updating %s",
-         cmd == U_FLASH ? "sketch"
-                        : (cmd == U_SPIFFS ? "filesystem" : "unknown"));
-  });
-  ArduinoOTA.onEnd([]() { LOGI("[OTA] End"); });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    LOGI("[OTA] Progress: %u%% (%d/%d)", 100 * progress / total, progress,
-         total);
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    LOGI("[OTA] Error: %s (%d)", ota_error_name(error), error);
-  });
-  ArduinoOTA.begin();
-}
-
 void SmartLightController::syncWifiPowerSave_() {
-  if (wifi_ps_disabled_) return;
-  constexpr unsigned long kRetryIntervalMs = 1000;
-  const unsigned long now = millis();
+  constexpr int64_t kRetryIntervalMs = 1000;
+  const int64_t now = esp_timer_get_time() / 1000;
   if (now - last_wifi_ps_attempt_ms_ < kRetryIntervalMs) return;
   last_wifi_ps_attempt_ms_ = now;
 
   // Right after begin(), the Wi-Fi driver may not be started yet (Matter
   // brings it up asynchronously), so this can transiently fail; retry until
   // the driver is ready instead of giving up after a single attempt.
-  if (esp_wifi_set_ps(WIFI_PS_NONE) == ESP_OK) {
-    wifi_ps_disabled_ = true;
-  }
+  //
+  // Keep reasserting this every second rather than stopping after the first
+  // success: the Matter/Wi-Fi stack can re-enable modem-sleep power save on
+  // its own later (e.g. around reconnects), and once that happens, the first
+  // HTTP request after any idle period stalls for several seconds while the
+  // radio wakes back up -- directly undermining the /update OTA endpoint's
+  // "just curl it" usability.
+  esp_wifi_set_ps(WIFI_PS_NONE);
 }
 
 void SmartLightController::syncHostnames_() {
@@ -128,17 +121,12 @@ void SmartLightController::syncHostnames_() {
     web_.clearHostnameUpdated();
   }
 
-  if (hostname_updated) {
-    ArduinoOTA.setHostname(settings_.hostname.c_str());
-    syncAdditionalMdnsHostname_(true);
-  } else {
-    syncAdditionalMdnsHostname_(false);
-  }
+  syncAdditionalMdnsHostname_(hostname_updated);
 }
 
 void SmartLightController::syncAdditionalMdnsHostname_(bool force) {
-  constexpr unsigned long kRetryIntervalMs = 1000;
-  const unsigned long now = millis();
+  constexpr int64_t kRetryIntervalMs = 1000;
+  const int64_t now = esp_timer_get_time() / 1000;
   if (!force && now - last_mdns_sync_attempt_ms_ < kRetryIntervalMs) return;
   last_mdns_sync_attempt_ms_ = now;
 
@@ -238,7 +226,7 @@ void SmartLightController::sendIrSignal_(const IRRemote::IRData& data,
   led_.blinkOnce(RgbLed::Color::Green);
   ir_remote_.send(data);
   LOGW("[IR-Tx] %s sent", label);
-  delay(100);
+  vTaskDelay(pdMS_TO_TICKS(100));
 }
 
 void SmartLightController::applyMatterEvents(SmartLightRuntimeState& state) {
@@ -358,12 +346,12 @@ void SmartLightController::reportWebAction_(
       return;
   }
 
-  String message = action_label;
+  std::string message = action_label;
   message += requested_value ? "をオンにしました。" : "をオフにしました。";
 
-  String linked_changes;
+  std::string linked_changes;
   auto append_change = [&linked_changes](const char* label, bool value) {
-    if (linked_changes.length()) linked_changes += "、";
+    if (!linked_changes.empty()) linked_changes += "、";
     linked_changes += label;
     linked_changes += value ? "をオン" : "をオフ";
   };
@@ -381,7 +369,7 @@ void SmartLightController::reportWebAction_(
     append_change("常夜灯", final_state.night_state);
   }
 
-  if (linked_changes.length()) {
+  if (!linked_changes.empty()) {
     message += " 連動して";
     message += linked_changes;
     message += "にしました。";
@@ -400,8 +388,8 @@ void SmartLightController::handleDecommission() {
   }
 
   if (!matter_light_.isCommissioned()) {
-    static long last_pairing_log_ms_ = 0;
-    const long now = millis();
+    static int64_t last_pairing_log_ms_ = 0;
+    const int64_t now = esp_timer_get_time() / 1000;
     if (now - last_pairing_log_ms_ > 10000) {
       last_pairing_log_ms_ = now;
       matter_light_.printOnboarding();

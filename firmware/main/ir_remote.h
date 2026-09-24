@@ -4,10 +4,20 @@
  */
 #pragma once
 
-#include <Arduino.h>
-#include <Preferences.h>
+#include <driver/gpio.h>
+#include <esp_attr.h>
+#include <esp_intr_alloc.h>
+#include <esp_rom_sys.h>
+#include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+#include <cmath>
+#include <cstdio>
+#include <vector>
 
 #include "app_log.h"
+#include "preferences.h"
 
 class IRRemote {
  public:
@@ -46,11 +56,12 @@ class IRRemote {
     IR_RECEIVER_AVAILABLE,
   };
 
-  int pin_tx_, pin_rx_;
+  gpio_num_t pin_tx_, pin_rx_;
   volatile IR_RECEIVER_STATE state_;
   uint16_t raw_index_;
   uint16_t raw_data_[RAW_DATA_BUFFER_SIZE];
-  uint64_t prev_us_;
+  volatile uint64_t prev_us_;
+  portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 
   void isr();
   static void IRAM_ATTR isrEntryPoint(void* this_ptr);
@@ -59,13 +70,28 @@ class IRRemote {
 ////////////////////////////////////////////////////////////////////////////////
 
 inline void IRRemote::begin(int tx, int rx) {
-  pin_tx_ = tx;
-  pin_rx_ = rx;
+  pin_tx_ = static_cast<gpio_num_t>(tx);
+  pin_rx_ = static_cast<gpio_num_t>(rx);
   state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
-  pinMode(pin_tx_, OUTPUT);
-  pinMode(pin_rx_, INPUT);
-  digitalWrite(pin_tx_, LOW);
-  attachInterruptArg(pin_rx_, isrEntryPoint, this, CHANGE);
+
+  gpio_config_t tx_cfg = {};
+  tx_cfg.pin_bit_mask = 1ULL << pin_tx_;
+  tx_cfg.mode = GPIO_MODE_OUTPUT;
+  gpio_config(&tx_cfg);
+  gpio_set_level(pin_tx_, 0);
+
+  gpio_config_t rx_cfg = {};
+  rx_cfg.pin_bit_mask = 1ULL << pin_rx_;
+  rx_cfg.mode = GPIO_MODE_INPUT;
+  rx_cfg.intr_type = GPIO_INTR_ANYEDGE;
+  gpio_config(&rx_cfg);
+
+  static bool isr_service_installed = false;
+  if (!isr_service_installed) {
+    gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
+    isr_service_installed = true;
+  }
+  gpio_isr_handler_add(pin_rx_, isrEntryPoint, this);
 }
 
 inline void IRRemote::clear() {
@@ -74,9 +100,9 @@ inline void IRRemote::clear() {
 }
 
 inline bool IRRemote::available() {
-  noInterrupts();
-  uint32_t diff = micros() - prev_us_;
-  interrupts();
+  portENTER_CRITICAL(&mux_);
+  uint32_t diff = static_cast<uint32_t>(esp_timer_get_time() - prev_us_);
+  portEXIT_CRITICAL(&mux_);
   switch (state_) {
     case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
     case IR_RECEIVER_STATE::IR_RECEIVER_START:
@@ -108,12 +134,12 @@ inline bool IRRemote::available() {
 }
 
 inline bool IRRemote::waitForAvailable(int timeout_ms) {
-  unsigned long start = millis();
+  const int64_t start = esp_timer_get_time() / 1000;
   while (!available()) {
-    if (timeout_ms > 0 && millis() - start > timeout_ms) {
+    if (timeout_ms > 0 && esp_timer_get_time() / 1000 - start > timeout_ms) {
       return false;
     }
-    delay(1);
+    vTaskDelay(pdMS_TO_TICKS(1));
   }
   return true;
 }
@@ -127,29 +153,40 @@ inline void IRRemote::isrEntryPoint(void* this_ptr) {
 }
 
 inline void IRRemote::send(const IRData& data) {
-  noInterrupts();
+  // The 8us/16us bit-bang loop below generates the IR carrier waveform
+  // directly by hand-timing GPIO toggles; if ANY interrupt (Wi-Fi, BLE,
+  // the FreeRTOS tick, ...) preempts it mid-pulse, that pulse stretches by
+  // however long the interrupt took, which is enough to make a real IR
+  // receiver fail to decode the signal even though this function completes
+  // and reports success. Disabling only the RX GPIO's own interrupt (as a
+  // prior version of this function did, to avoid disturbing Wi-Fi/BLE
+  // timing) does NOT protect against this -- only a full critical section,
+  // matching the original Arduino noInterrupts()/interrupts() this was
+  // ported from, does.
+  portENTER_CRITICAL(&mux_);
   {
     enum IR_RECEIVER_STATE state_cache = state_;
     state_ = IR_RECEIVER_STATE::IR_RECEIVER_OFF;
     for (uint16_t count = 0; count < data.size(); count++) {
-      uint64_t us = micros();
+      uint64_t us = esp_timer_get_time();
       uint16_t time = data[count];
       do {
-        digitalWrite(pin_tx_, !(count & 1));
-        delayMicroseconds(8);
-        digitalWrite(pin_tx_, 0);
-        delayMicroseconds(16);
-      } while (int32_t(us + time - micros()) > 0);
+        gpio_set_level(pin_tx_, !(count & 1));
+        esp_rom_delay_us(8);
+        gpio_set_level(pin_tx_, 0);
+        esp_rom_delay_us(16);
+      } while (int32_t(us + time - esp_timer_get_time()) > 0);
     }
     state_ = state_cache;
   }
-  interrupts();
+  portEXIT_CRITICAL(&mux_);
   LOGD("[IR] Send OK (size: %zu)", data.size());
 }
 
 inline void IRRemote::isr() {
-  uint64_t us = micros();
-  uint32_t diff = us - prev_us_;
+  portENTER_CRITICAL_ISR(&mux_);
+  uint64_t us = esp_timer_get_time();
+  uint32_t diff = static_cast<uint32_t>(us - prev_us_);
 
   switch (state_) {
     case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
@@ -174,6 +211,7 @@ inline void IRRemote::isr() {
   }
 
   prev_us_ = us;
+  portEXIT_CRITICAL_ISR(&mux_);
 }
 
 inline void IRRemote::print(const IRData& data, const char* label) {
@@ -181,7 +219,7 @@ inline void IRRemote::print(const IRData& data, const char* label) {
     LOGI("[IR] Raw Data (size: %zu) %s", data.size(), label);
   else
     LOGI("[IR] Raw Data (size: %zu)", data.size());
-  for (int i = 0; i < data.size(); ++i) {
+  for (size_t i = 0; i < data.size(); ++i) {
     printf("%d", data[i]);
     if (i != data.size() - 1) printf(",");
   }

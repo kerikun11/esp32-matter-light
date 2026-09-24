@@ -3,26 +3,33 @@
  * @copyright 2025 Ryotaro Onuki
  */
 #pragma once
-#include <Arduino.h>
+#include <driver/gpio.h>
+#include <esp_timer.h>
 
 #include <climits>
 
 class MotionSensor {
  public:
-  explicit MotionSensor(uint8_t pin) : pin_(pin) {
-    pinMode(pin_, INPUT_PULLDOWN);
+  explicit MotionSensor(int pin) : pin_(static_cast<gpio_num_t>(pin)) {
+    gpio_config_t cfg = {};
+    cfg.pin_bit_mask = 1ULL << pin_;
+    cfg.mode = GPIO_MODE_INPUT;
+    cfg.pull_up_en = GPIO_PULLUP_DISABLE;
+    cfg.pull_down_en = GPIO_PULLDOWN_ENABLE;
+    cfg.intr_type = GPIO_INTR_DISABLE;
+    gpio_config(&cfg);
   }
 
   void update() {
-    if (digitalRead(pin_) == HIGH) {
-      last_motion_time_ms_ = millis();
+    if (gpio_get_level(pin_)) {
+      last_motion_time_ms_ = esp_timer_get_time() / 1000;
       seen_motion_ = true;
     }
   }
 
   int getSecondsSinceLastMotion() const {
     if (!seen_motion_) return INT_MAX;
-    return (millis() - last_motion_time_ms_) / 1000;
+    return (esp_timer_get_time() / 1000 - last_motion_time_ms_) / 1000;
   }
 
   bool isOccupied(int timeout_seconds) const {
@@ -30,7 +37,7 @@ class MotionSensor {
   }
 
  private:
-  const uint8_t pin_;
-  unsigned long last_motion_time_ms_ = 0;
+  const gpio_num_t pin_;
+  int64_t last_motion_time_ms_ = 0;
   bool seen_motion_ = false;
 };

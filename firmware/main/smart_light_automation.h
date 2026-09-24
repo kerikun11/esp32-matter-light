@@ -4,8 +4,6 @@
  */
 #pragma once
 
-#include <Arduino.h>
-
 #include "matter_light.h"
 #include "rgb_led.h"
 

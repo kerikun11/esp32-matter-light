@@ -7,12 +7,12 @@
 /* Pin Assign */
 #if CONFIG_IDF_TARGET_ESP32S3
 
-#define CONFIG_APP_PIN_LIGHT_SENSOR 2   //< ADC
-#define CONFIG_APP_PIN_BUTTON BOOT_PIN  //< 0 (defined in esp32-hal.h)
+#define CONFIG_APP_PIN_LIGHT_SENSOR 2  //< ADC
+#define CONFIG_APP_PIN_BUTTON 0        //< BOOT button
 #define CONFIG_APP_PIN_MOTION_SENSOR 1
 #define CONFIG_APP_PIN_IR_TRANSMITTER 4
 #define CONFIG_APP_PIN_IR_RECEIVER 5
-#define CONFIG_APP_PIN_RGB_LED PIN_RGB_LED  //< 48 (defined in pins_arduino.h)
+#define CONFIG_APP_PIN_RGB_LED 48  //< onboard addressable RGB LED
 
 #elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C6
 
@@ -33,8 +33,8 @@
 #define CONFIG_APP_PIN_MOTION_SENSOR 4
 #define CONFIG_APP_PIN_IR_TRANSMITTER 6
 #define CONFIG_APP_PIN_IR_RECEIVER 7
-#define CONFIG_APP_PIN_RGB_LED PIN_RGB_LED  //< 8 (defined in pins_arduino.h)
-#define CONFIG_APP_PIN_BUTTON BOOT_PIN      //< 9 (defined in esp32-hal.h)
+#define CONFIG_APP_PIN_RGB_LED 8  //< onboard addressable RGB LED
+#define CONFIG_APP_PIN_BUTTON 9   //< BOOT button
 #endif
 
 #else

@@ -178,6 +178,22 @@ class MatterLight {
   esp_matter::endpoint_t *ep_night_ = nullptr;
   QueueHandle_t queue_ = nullptr;
 
+  // attrCb_ re-reads ALL THREE endpoints' current attribute values on every
+  // single-endpoint update (to build a consistent Event snapshot). When the
+  // app's own commitSwitchState()/commitNightState()/commitLightState() fire
+  // several of these writes back-to-back in one pass, an earlier write's
+  // callback can observe a not-yet-committed ("stale") value for an endpoint
+  // a later write in the same pass is about to change. That stale value then
+  // gets replayed as if it were a fresh remote command on the next loop tick,
+  // which the no-motion switch/light interlock (see
+  // SmartLightAutomation::syncSwitchStateFromLight_) reacts to by flipping
+  // the switch again -- a self-sustaining ON/OFF oscillation, once started by
+  // any light change while unoccupied. Since the Event queue exists to learn
+  // about REMOTE (Matter-network) commands, not to echo the app's own writes
+  // back to itself, suppress Event generation entirely while a local write
+  // (via setOnOffAttr_) is in flight.
+  bool self_write_in_progress_ = false;
+
   bool setOnOffAttr_(esp_matter::endpoint_t *ep, bool on) {
     if (!ep) return false;
     auto *cluster =
@@ -187,10 +203,16 @@ class MatterLight {
         cluster, chip::app::Clusters::OnOff::Attributes::OnOff::Id);
     if (!attr) return false;
     esp_matter_attr_val_t v = esp_matter_bool(on);
+    // Suppress attrCb_ for the duration of this call: this is OUR OWN write
+    // (from setLightState/setSwitchState/setNightState, called by the app's
+    // own commit logic), not a remote/Matter-network command, so it must not
+    // generate an Event -- see the comment on self_write_in_progress_.
+    self_write_in_progress_ = true;
     // set_val() returns ESP_ERR_NOT_FINISHED (not ESP_OK) when the value is
     // already what's being set (e.g. right after config_t already applied it
     // at endpoint creation) -- that's not a failure.
     esp_err_t err = esp_matter::attribute::set_val(attr, &v);
+    self_write_in_progress_ = false;
     return err == ESP_OK || err == ESP_ERR_NOT_FINISHED;
   }
 
@@ -223,6 +245,7 @@ class MatterLight {
 
     MatterLight *self = findOwnerByEndpoint_(endpoint_id);
     if (!self) return ESP_OK;
+    if (self->self_write_in_progress_) return ESP_OK;
 
     const uint16_t ep_light = esp_matter::endpoint::get_id(self->ep_light_);
     const uint16_t ep_plugin = esp_matter::endpoint::get_id(self->ep_plugin_);

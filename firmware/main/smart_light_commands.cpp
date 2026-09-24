@@ -5,6 +5,8 @@
 
 #include "smart_light_commands.h"
 
+#include <esp_system.h>
+
 #include <cstdlib>
 
 bool SmartLightCommandHandler::handle() {
@@ -20,7 +22,7 @@ bool SmartLightCommandHandler::handle() {
     return false;
   }
   if (cmd == "reboot" || cmd == "b") {
-    ESP.restart();
+    esp_restart();
     return false;
   }
   if (cmd == "info" || cmd == "i") {
@@ -170,6 +172,6 @@ bool SmartLightCommandHandler::handleNightlight(
       settings_.night_light_feature_enabled);
   LOGI("[NightLight] %s -> rebooting...",
        settings_.night_light_feature_enabled ? "on" : "off");
-  ESP.restart();
+  esp_restart();
   return false;
 }

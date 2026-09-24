@@ -4,7 +4,7 @@
  */
 #pragma once
 
-#include <Arduino.h>
+#include <esp_timer.h>
 
 /* app log level (0: None, 1: Error, 2: Warn, 3: Info, 4: Debug) */
 #ifndef APP_LOG_LEVEL
@@ -17,7 +17,7 @@
 /* app log base */
 #define APP_LOG_BASE(l, c, f, ...)                                \
   do {                                                            \
-    const auto us = micros();                                     \
+    const auto us = esp_timer_get_time();                          \
     fprintf(stdout,                                               \
             c "[" l "][%d.%06d][" __FILE__                        \
               ":" APP_LOG_TO_STRING(__LINE__) "]\e[0m " f "\n",   \

@@ -4,20 +4,20 @@
  */
 #pragma once
 
-#include <Arduino.h>
-
 #include <cctype>
+#include <cstdio>
 #include <deque>
 #include <string>
 #include <vector>
 
+// Reads commands from stdin (the USB-Serial-JTAG console), which the
+// console driver puts in non-blocking mode by default.
 class CommandParser {
  public:
-  explicit CommandParser(Stream& io) : io_(io) {}
-
   void update() {
-    while (io_.available()) {
-      char c = (char)io_.read();
+    int ic;
+    while ((ic = getchar()) != EOF) {
+      char c = (char)ic;
       switch (c) {
         case '\n':
         case '\r':
@@ -27,9 +27,10 @@ class CommandParser {
           }
           break;
         case '\b':
+        case 0x7f:  // DEL, sent by most terminals for backspace
           if (!line_.empty()) line_.pop_back();
-          io_.print("\b ");  // erase last character
-          break;
+          fputs("\b \b", stdout);  // erase last character
+          continue;
         case '0' ... '9':
         case 'a' ... 'z':
         case 'A' ... 'Z':
@@ -41,7 +42,7 @@ class CommandParser {
         default:
           continue;
       }
-      io_.print(c);
+      putchar(c);
     }
   }
 
@@ -55,7 +56,6 @@ class CommandParser {
   }
 
  private:
-  Stream& io_;
   std::string line_;
   std::deque<std::vector<std::string> > queue_;
 
