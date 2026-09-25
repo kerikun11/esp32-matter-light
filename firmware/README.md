@@ -57,19 +57,30 @@ idf.py -p /dev/ttyACM0 monitor
 curlコマンドでファームウェアを書き換えられる。書き込み後は自動で再起動する。
 
 ```sh
-curl --data-binary @build/esp32-matter-light.bin "http://<ホスト名>.local/update"
+TARGET=xxx
+curl --fail-with-body \
+  --progress-bar \
+  --output /dev/stdout \
+  --write-out $'\nHTTP %{http_code}\n' \
+  --header "Content-Type: application/octet-stream" \
+  --data-binary @build/esp32-matter-light.bin \
+  "http://${TARGET}.local/update"
 ```
+
+`xxx`にはWeb画面で設定したホスト名を指定する。進捗バー、デバイスからのレスポンス、HTTPステータスはすべて標準出力へ表示される。
 
 デバイスに書き込まれているファームウェアのプロジェクト名（CMakeの`PROJECT_NAME`）とアップロードするイメージのプロジェクト名が一致しない場合は拒否される（LAN内に別機種のESP32デバイスが混在していても誤って別機種用のファームウェアを書き込まないようにするためのガード）。プロジェクト名を変更した直後など、意図的に上書きしたい場合はクエリパラメータでチェックを無効化できる。
 
 ```sh
-curl --data-binary @build/esp32-matter-light.bin "http://<ホスト名>.local/update?skip_check=1"
+curl --fail-with-body \
+  --data-binary @build/esp32-matter-light.bin \
+  "http://${TARGET}.local/update?skip_check=1"
 ```
 
 現在のバージョン情報は `GET /version` で確認できる。
 
 ```sh
-curl "http://<ホスト名>.local/version"
+curl "http://${TARGET}.local/version"
 ```
 
 新しいファームウェアの初回起動がクラッシュループした場合は、ブートローダーが自動的に直前のファームウェアにロールバックする。
