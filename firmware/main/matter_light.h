@@ -17,7 +17,11 @@
 #include <freertos/queue.h>
 #include <inttypes.h>
 #include <platform/ConfigurationManager.h>
+#include <platform/PlatformManager.h>
 #include <system/SystemClock.h>
+
+#include <algorithm>
+#include <cstring>
 
 class MatterLight {
  public:
@@ -163,14 +167,65 @@ class MatterLight {
 
   void decommission() {
     ESP_LOGW(TAG, "Decommissioning device...");
-    chip::Server::GetInstance().GetFabricTable().DeleteAllFabrics();
+    {
+      ChipStackLock lock;
+      chip::Server::GetInstance().GetFabricTable().DeleteAllFabrics();
+    }
     chip::DeviceLayer::ConfigurationMgr().InitiateFactoryReset();
+  }
+
+  // Lists commissioned fabrics without touching any of them, so a stale
+  // entry (e.g. from a controller that was removed/replaced without first
+  // decommissioning it here) can be identified before removing just that
+  // one with removeFabric().
+  void listFabrics() const {
+    ChipStackLock lock;
+    auto &table = chip::Server::GetInstance().GetFabricTable();
+    ESP_LOGI(TAG, "Fabrics (%u):",
+             static_cast<unsigned>(table.FabricCount()));
+    for (const auto &fabric : table) {
+      const auto label_span = fabric.GetFabricLabel();
+      char label[34] = {};
+      const size_t len = std::min(label_span.size(), sizeof(label) - 1);
+      memcpy(label, label_span.data(), len);
+      ESP_LOGI(TAG,
+               "  index=%u nodeId=0x%016" PRIX64 " fabricId=0x%016" PRIX64
+               " vendorId=0x%04X label='%s'",
+               fabric.GetFabricIndex(), fabric.GetNodeId(),
+               fabric.GetFabricId(), fabric.GetVendorId(), label);
+    }
+  }
+
+  // Removes a single fabric by index (as printed by listFabrics()), leaving
+  // every other fabric's commissioning intact -- unlike decommission(),
+  // which wipes all of them plus does a full factory reset.
+  bool removeFabric(uint8_t fabric_index) {
+    ChipStackLock lock;
+    const auto err = chip::Server::GetInstance().GetFabricTable().Delete(
+        static_cast<chip::FabricIndex>(fabric_index));
+    if (err != CHIP_NO_ERROR) {
+      ESP_LOGE(TAG, "Delete fabric %u failed: %" CHIP_ERROR_FORMAT,
+               fabric_index, err.Format());
+      return false;
+    }
+    ESP_LOGW(TAG, "Fabric %u removed", fabric_index);
+    return true;
   }
 
  private:
   static constexpr const char *TAG = "MatterLight";
   static constexpr size_t kQueueSize = 8;
   static constexpr size_t kMaxInstances = 8;
+
+  // chip::DeviceLayer::StackLock (CHIP's own RAII PlatformMgr lock guard):
+  // most CHIP APIs -- including FabricTable mutations, which emit a
+  // reporting-engine event -- assert that this is held when called from any
+  // task other than the Matter event loop. decommission()/listFabrics()/
+  // removeFabric() run on the app's own task (button handler / USB
+  // console), not the Matter task, so they must take it explicitly: without
+  // this, removeFabric() aborted the device with "Chip stack locking error"
+  // at EventManagement.cpp:414.
+  using ChipStackLock = chip::DeviceLayer::StackLock;
 
   esp_matter::node_t *node_ = nullptr;
   esp_matter::endpoint_t *ep_light_ = nullptr;

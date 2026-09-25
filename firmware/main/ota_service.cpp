@@ -76,7 +76,7 @@ esp_err_t handleUpdate(httpd_req_t* req) {
   std::string buf(kOtaRecvBufSize, '\0');
   size_t received = 0;
   int consecutive_timeouts = 0;
-  constexpr int kMaxConsecutiveTimeouts = 5;  // ~25s of dead silence total
+  constexpr int kMaxConsecutiveTimeouts = 5;  // 6 timeouts x 5s = ~30s of dead silence total
   while (received < req->content_len) {
     const int ret = httpd_req_recv(
         req, buf.data(),

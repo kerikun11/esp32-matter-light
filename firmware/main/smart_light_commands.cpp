@@ -44,6 +44,13 @@ bool SmartLightCommandHandler::handle() {
   if (cmd == "nightlight" || cmd == "nl") {
     return handleNightlight(tokens);
   }
+  if (cmd == "fabrics") {
+    matter_light_.listFabrics();
+    return false;
+  }
+  if (cmd == "fabric-rm") {
+    return handleFabricRemove(tokens);
+  }
   return false;
 }
 
@@ -61,6 +68,8 @@ void SmartLightCommandHandler::printHelp() const {
        settings_.ambient_light_mode_enabled ? "on" : "off");
   LOGI("- nightlight <on|off> : Night Light Endpoint (current: %s, reboot required)",
        settings_.night_light_feature_enabled ? "on" : "off");
+  LOGI("- fabrics           : List commissioned Matter fabrics");
+  LOGI("- fabric-rm <index> : Remove a single fabric by index (see 'fabrics')");
 }
 
 void SmartLightCommandHandler::handleInfo() const {
@@ -173,5 +182,22 @@ bool SmartLightCommandHandler::handleNightlight(
   LOGI("[NightLight] %s -> rebooting...",
        settings_.night_light_feature_enabled ? "on" : "off");
   esp_restart();
+  return false;
+}
+
+bool SmartLightCommandHandler::handleFabricRemove(
+    const std::vector<std::string>& tokens) {
+  if (tokens.size() < 2) {
+    LOGE("Usage: fabric-rm <index>");
+    return false;
+  }
+
+  const int index = atoi(tokens[1].c_str());
+  if (index <= 0 || index > 255) {
+    LOGE("fabric-rm: index must be 1-255 (see 'fabrics')");
+    return false;
+  }
+
+  matter_light_.removeFabric(static_cast<uint8_t>(index));
   return false;
 }

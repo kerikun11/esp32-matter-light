@@ -305,7 +305,8 @@ TESTS: list[tuple[str, Test]] = [
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--host", default="xiao.local", help="device hostname or IP (default: xiao.local)")
-    parser.add_argument("--timeout", type=float, default=20.0, help="per-request timeout in seconds")
+    parser.add_argument("--timeout", type=float, default=20.0,
+                        help="per-request timeout in seconds (default: 20.0)")
     parser.add_argument("-v", "--verbose", action="store_true", help="log every HTTP request")
     args = parser.parse_args()
 

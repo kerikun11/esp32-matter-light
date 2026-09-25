@@ -20,7 +20,7 @@
 
 SmartLightController::SmartLightController()
     : command_handler_(command_parser_, settings_, settings_store_, ir_remote_,
-                       brightness_sensor_),
+                       brightness_sensor_, matter_light_),
       web_(settings_, settings_mutex_, settings_store_, ir_remote_, led_) {}
 
 void SmartLightController::begin() {

@@ -61,7 +61,7 @@ inline std::map<std::string, std::string> parseFormBody(httpd_req_t* req) {
   std::string body(req->content_len, '\0');
   size_t received = 0;
   int consecutive_timeouts = 0;
-  constexpr int kMaxConsecutiveTimeouts = 5;  // ~25s of dead silence total
+  constexpr int kMaxConsecutiveTimeouts = 5;  // 6 timeouts x 5s = ~30s of dead silence total
   while (received < req->content_len) {
     const int ret = httpd_req_recv(req, body.data() + received,
                                    req->content_len - received);

@@ -10,6 +10,7 @@
 #include "brightness_sensor.h"
 #include "command_parser.h"
 #include "ir_remote.h"
+#include "matter_light.h"
 #include "smart_light_settings.h"
 
 class SmartLightCommandHandler {
@@ -18,12 +19,14 @@ class SmartLightCommandHandler {
                            SmartLightSettings& settings,
                            SmartLightSettingsStore& settings_store,
                            IRRemote& ir_remote,
-                           BrightnessSensor& brightness_sensor)
+                           BrightnessSensor& brightness_sensor,
+                           MatterLight& matter_light)
       : command_parser_(command_parser),
         settings_(settings),
         settings_store_(settings_store),
         ir_remote_(ir_remote),
-        brightness_sensor_(brightness_sensor) {}
+        brightness_sensor_(brightness_sensor),
+        matter_light_(matter_light) {}
 
   bool handle();
 
@@ -33,6 +36,7 @@ class SmartLightCommandHandler {
   SmartLightSettingsStore& settings_store_;
   IRRemote& ir_remote_;
   BrightnessSensor& brightness_sensor_;
+  MatterLight& matter_light_;
 
   void printHelp() const;
   void handleInfo() const;
@@ -41,4 +45,5 @@ class SmartLightCommandHandler {
   bool handleTimeout(const std::vector<std::string>& tokens);
   bool handleAmbient(const std::vector<std::string>& tokens);
   bool handleNightlight(const std::vector<std::string>& tokens);
+  bool handleFabricRemove(const std::vector<std::string>& tokens);
 };
