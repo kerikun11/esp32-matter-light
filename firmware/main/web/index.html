@@ -40,6 +40,7 @@
     button:disabled{cursor:wait}
     .save-row{padding:16px;border:1px solid #bfdbfe;border-radius:14px;background:#eff6ff}.save-row .mini{margin:0;color:#1e40af}.save-row button{min-width:150px}
     .device-section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+    .info-list{margin:0;display:grid;gap:6px}.info-list dt{color:var(--muted);font-size:13px}.info-list dd{margin:0 0 8px;white-space:pre-line;overflow-wrap:anywhere}.fabric-list{display:grid;gap:12px}
     .ir-section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
     .fold summary{display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer;padding:18px 20px;font-size:17px;font-weight:700}
     .fold summary::-webkit-details-marker{display:none}.fold summary span{color:var(--muted);font-size:12px;font-weight:500}.fold .body{padding:0 20px 20px}
@@ -101,7 +102,7 @@
     <div id="status" class="status" role="status" hidden></div>
 
     <div class="two-col">
-      <details class="fold" >
+      <details id="settings-pane" class="fold" >
         <summary>設定<span>タップして開閉</span></summary>
         <div class="body">
           <form class="stack" method="post" action="/settings">
@@ -152,6 +153,14 @@
               </form>
             </div>
           </div>
+          <section class="device-section" aria-labelledby="info-title">
+            <h2 id="info-title" class="section-title">デバイス情報</h2>
+            <p id="info-status" class="section-description" role="status">設定を開くと最新情報を取得します。</p>
+            <dl id="device-info" class="info-list"></dl>
+            <h3 class="section-title">Fabric一覧 <span id="fabric-count"></span></h3>
+            <p class="section-description">このデバイスが登録されているMatterネットワークです。</p>
+            <div id="fabric-list" class="fabric-list"></div>
+          </section>
           <div class="ir-section">
             <div>
               <h2 class="section-title">赤外線リモコン学習</h2>
@@ -277,6 +286,52 @@
     try { render(await request('/state')); }
     catch (error) { notice('状態を取得できませんでした。ページを再読み込みしてください。', true); }
   }
+  function infoRow(list, label, value) {
+    const term = document.createElement('dt');
+    const description = document.createElement('dd');
+    term.textContent = label;
+    description.textContent = value;
+    list.append(term, description);
+  }
+  async function loadDeviceInfo() {
+    get('info-status').textContent = '取得中…';
+    get('device-info').replaceChildren();
+    get('fabric-list').replaceChildren();
+    get('fabric-count').textContent = '';
+    try {
+      const info = await request('/device-info');
+      const list = get('device-info');
+      infoRow(list, 'IPv4アドレス', info.ipv4 || '未取得');
+      infoRow(list, 'IPv6アドレス', info.ipv6.join('\n') || '未取得');
+      infoRow(list, 'Wi-Fi', info.connected ? info.ssid + '（' + info.rssi + ' dBm）' : '未接続');
+      infoRow(list, 'ファームウェア', info.version);
+      infoRow(list, 'ESP-IDF', info.idf_version);
+      infoRow(list, '稼働時間', Math.floor(info.uptime_seconds / 3600) + '時間 ' + Math.floor(info.uptime_seconds % 3600 / 60) + '分');
+      get('fabric-count').textContent = '（' + info.fabrics.length + '件）';
+      for (const fabric of info.fabrics) {
+        const card = document.createElement('dl');
+        card.className = 'info-list setting-card';
+        infoRow(card, 'Fabric #' + fabric.index, fabric.label || 'ラベルなし');
+        infoRow(card, 'Fabric ID', fabric.fabric_id);
+        infoRow(card, 'Node ID', fabric.node_id);
+        infoRow(card, 'Vendor ID', fabric.vendor_id);
+        get('fabric-list').append(card);
+      }
+      if (!info.fabrics.length) get('fabric-list').textContent = '登録済みのFabricはありません。';
+      get('info-status').textContent = '設定ペインを開くたびに更新します。';
+    } catch (error) {
+      get('device-info').replaceChildren();
+      get('fabric-list').replaceChildren();
+      get('fabric-count').textContent = '';
+      get('info-status').textContent = '情報を取得できませんでした。設定ペインを開き直してください。';
+    }
+  }
+  get('settings-pane').addEventListener('toggle', () => {
+    if (get('settings-pane').open) loadDeviceInfo();
+  });
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted && get('settings-pane').open) loadDeviceInfo();
+  });
   // A browser back/forward-cache restore must also fetch fresh device state.
   window.addEventListener('pageshow', (event) => { if (event.persisted) load(); });
   load();

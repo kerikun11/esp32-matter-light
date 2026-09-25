@@ -179,6 +179,22 @@ class PreviewHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/": self.send_html()
         elif path == "/state": self.send_state()
+        elif path == "/device-info":
+            content = json.dumps({
+                "version": "preview", "idf_version": "5.5.1",
+                "uptime_seconds": 3660, "connected": True,
+                "ssid": "Preview Wi-Fi", "rssi": -48,
+                "ipv4": "192.0.2.10", "ipv6": ["2001:db8::10", "fe80::10"],
+                "fabrics": [{"index": 1, "label": "サンプルFabric",
+                             "fabric_id": "0xFEDCBA9876543210",
+                             "node_id": "0x1234567890ABCDEF", "vendor_id": "0xFFF1"}],
+            }, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
         else: self.send_error(404)
 
     def do_POST(self):

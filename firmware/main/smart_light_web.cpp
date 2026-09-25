@@ -6,6 +6,14 @@
 #include "smart_light_web.h"
 
 #include <cstdlib>
+#include <cinttypes>
+#include <cstdio>
+#include <cstring>
+#include <esp_app_desc.h>
+#include <esp_netif.h>
+#include <esp_wifi.h>
+#include <app/server/Server.h>
+#include <platform/PlatformManager.h>
 #include <cJSON.h>
 #include <esp_timer.h>
 #include <freertos/task.h>
@@ -61,6 +69,10 @@ void SmartLightWeb::begin() {
   const httpd_uri_t state_uri = {
       .uri = "/state", .method = HTTP_GET,
       .handler = &handleStateTrampoline, .user_ctx = this};
+  const httpd_uri_t info_uri = {
+      .uri = "/device-info", .method = HTTP_GET,
+      .handler = &handleDeviceInfoTrampoline, .user_ctx = this};
+  httpd_register_uri_handler(server_, &info_uri);
   httpd_register_uri_handler(server_, &root_uri);
   httpd_register_uri_handler(server_, &state_uri);
   httpd_register_uri_handler(server_, &settings_uri);
@@ -340,5 +352,71 @@ esp_err_t SmartLightWeb::sendState(httpd_req_t* req) {
       status_is_error_ = false;
     }
   }
+  return result;
+}
+
+// Read Matter under its stack lock, independently of the settings mutex.
+esp_err_t SmartLightWeb::sendDeviceInfo(httpd_req_t* req) {
+  cJSON* info = cJSON_CreateObject();
+  if (!info) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+  bool ok = true;
+  const auto* app = esp_app_get_description();
+  ok &= cJSON_AddStringToObject(info, "version", app->version) != nullptr;
+  ok &= cJSON_AddStringToObject(info, "idf_version", app->idf_ver) != nullptr;
+  ok &= cJSON_AddNumberToObject(info, "uptime_seconds", esp_timer_get_time() / 1000000) != nullptr;
+  wifi_ap_record_t ap{};
+  const bool connected = esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+  const std::string ssid(reinterpret_cast<const char*>(ap.ssid),
+                         strnlen(reinterpret_cast<const char*>(ap.ssid), sizeof(ap.ssid)));
+  ok &= cJSON_AddBoolToObject(info, "connected", connected) != nullptr;
+  ok &= cJSON_AddStringToObject(info, "ssid", ssid.c_str()) != nullptr;
+  ok &= cJSON_AddNumberToObject(info, "rssi", ap.rssi) != nullptr;
+  auto* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+  esp_netif_ip_info_t ip{};
+  char address[48] = {};
+  if (connected && netif && esp_netif_get_ip_info(netif, &ip) == ESP_OK && ip.ip.addr) {
+    snprintf(address, sizeof(address), IPSTR, IP2STR(&ip.ip));
+  }
+  ok &= cJSON_AddStringToObject(info, "ipv4", address) != nullptr;
+  auto* ipv6 = cJSON_AddArrayToObject(info, "ipv6");
+  ok &= ipv6 != nullptr;
+  if (connected && netif && ipv6) {
+    esp_ip6_addr_t addresses[CONFIG_LWIP_IPV6_NUM_ADDRESSES]{};
+    const int count = esp_netif_get_all_preferred_ip6(netif, addresses);
+    for (int i = 0; i < count; ++i) {
+      snprintf(address, sizeof(address), IPV6STR, IPV62STR(addresses[i]));
+      auto* item = cJSON_CreateString(address);
+      if (!item || !cJSON_AddItemToArray(ipv6, item)) { cJSON_Delete(item); ok = false; }
+    }
+  }
+  auto* fabrics = cJSON_AddArrayToObject(info, "fabrics");
+  ok &= fabrics != nullptr;
+  if (fabrics) {
+    chip::DeviceLayer::StackLock lock;
+    for (const auto& fabric : chip::Server::GetInstance().GetFabricTable()) {
+      auto* item = cJSON_CreateObject();
+      if (!item) { ok = false; break; }
+      const auto label = fabric.GetFabricLabel();
+      const std::string label_text(label.data(), label.size());
+      char node_id[19], fabric_id[19], vendor_id[7];
+      snprintf(node_id, sizeof(node_id), "0x%016" PRIX64, fabric.GetNodeId());
+      snprintf(fabric_id, sizeof(fabric_id), "0x%016" PRIX64, fabric.GetFabricId());
+      snprintf(vendor_id, sizeof(vendor_id), "0x%04X", static_cast<unsigned>(fabric.GetVendorId()));
+      ok &= cJSON_AddNumberToObject(item, "index", fabric.GetFabricIndex()) != nullptr;
+      ok &= cJSON_AddStringToObject(item, "label", label_text.c_str()) != nullptr;
+      // Keep 64-bit identifiers as strings to avoid JavaScript precision loss.
+      ok &= cJSON_AddStringToObject(item, "node_id", node_id) != nullptr;
+      ok &= cJSON_AddStringToObject(item, "fabric_id", fabric_id) != nullptr;
+      ok &= cJSON_AddStringToObject(item, "vendor_id", vendor_id) != nullptr;
+      if (!cJSON_AddItemToArray(fabrics, item)) { cJSON_Delete(item); ok = false; }
+    }
+  }
+  char* json = ok ? cJSON_PrintUnformatted(info) : nullptr;
+  cJSON_Delete(info);
+  if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+  httpd_resp_set_type(req, "application/json; charset=utf-8");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+  const auto result = httpd_resp_sendstr(req, json);
+  cJSON_free(json);
   return result;
 }
