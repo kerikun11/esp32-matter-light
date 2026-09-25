@@ -3,3 +3,6 @@ build
 managed_components
 dependencies.lock
 sdkconfig.old
+# Python
+__pycache__/
+*.py[cod]

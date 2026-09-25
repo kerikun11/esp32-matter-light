@@ -1,0 +1,26 @@
+/* Shared device UI: colors, typography, controls and feedback. */
+:root{--panel:#fff;--line:#dbe3ef;--ink:#17212b;--muted:#64748b;--accent:#2563eb;--good:#166534;--bad:#991b1b;--on:#16a34a;--off:#dc2626;--soft:#fbfdff;--shadow:0 10px 30px rgba(15,23,42,.08)}
+body{margin:0;min-height:100vh;background:linear-gradient(180deg,#f8fbff,#eef3f9) fixed;color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+button{border:0;border-radius:12px;padding:12px 16px;background:var(--accent);color:#fff;font:700 15px system-ui;cursor:pointer}
+button.secondary{background:#e2e8f0;color:var(--ink)}
+input:not([type=range]):not([type=hidden]){width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+main{max-width:720px;margin:0 auto;padding:16px}
+footer{padding:0 0 16px;text-align:center;color:var(--muted);font-size:12px}
+.hero,.fold{overflow:hidden;border:1px solid var(--line);border-radius:20px;background:var(--panel);box-shadow:var(--shadow)}
+.topbar{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;margin-top:20px;align-items:stretch}
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.setting-card{display:grid;gap:6px}
+.section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+button.pending,button.toggle-btn.pending{background:#ffedd5;color:#9a3412;cursor:wait}
+.fold{margin-top:14px}
+.fold summary{display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer;padding:16px 18px;font-size:17px;font-weight:700}
+.fold .body{padding:0 20px 20px}
+#preview{margin:0 0 14px}
+.notice{margin-top:14px;padding:14px 18px;border:1px solid #f59e0b;border-radius:12px;background:#fef3c7;color:#92400e;font-size:14px}
+.pairing{padding:14px 16px;border:1px dashed #a78bfa;border-radius:14px;background:#f5f3ff}
+.pairing code{font-size:20px;font-weight:750;letter-spacing:.06em}

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 from dataclasses import dataclass, field, replace
 import hashlib
 import json
@@ -13,10 +14,31 @@ from urllib.parse import parse_qs, urlsplit
 
 
 FIRMWARE_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = FIRMWARE_ROOT / "main/web/index.html"
+TEMPLATE = FIRMWARE_ROOT / "web/index.html"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_web import build
+sys.path.insert(0, str(FIRMWARE_ROOT / "components/device_common/tools/web"))
+from build_web import build, source_files
 STATE_LOCK = Lock()
+DEFAULT_PORT = 8000
+
+
+def port_number(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("port must be an integer") from error
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
+    return port
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Preview the light Web UI")
+    parser.add_argument(
+        "-p", "--port", type=port_number, default=DEFAULT_PORT,
+        help=f"TCP port to listen on (default: {DEFAULT_PORT})",
+    )
+    return parser.parse_args()
 
 
 @dataclass
@@ -138,7 +160,7 @@ def action_status(target: str, enabled: bool, direct_state, final_state) -> str:
 
 class PreviewHandler(BaseHTTPRequestHandler):
     def send_html(self):
-        plain, compressed = assets(TEMPLATE.stat().st_mtime_ns)
+        plain, compressed = assets(tuple(p.stat().st_mtime_ns for p in source_files(TEMPLATE)))
         header = self.headers.get("Accept-Encoding", "")
         gzip = encoding_quality(header, "gzip") > 0
         if not gzip and encoding_quality(header, "identity") == 0:
@@ -196,6 +218,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 "ssid": "Preview Wi-Fi", "rssi": -48,
                 "ipv4": "192.0.2.10", "ipv6": ["2001:db8::10", "fe80::10"],
                 "fabrics": fabrics, "commissioning_open": commissioning_open,
+                "manual_code": "34970112332", "qr_payload": "MT:Y.K9042C00KA0648G00",
             }, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -216,6 +239,8 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 self.handle_matter(form)
             elif self.path == "/record":
                 self.handle_record(form)
+            elif self.path == "/reboot":
+                self.handle_reboot(form)
             else:
                 set_status("不明な操作です。", True)
         self.respond_mutation()
@@ -309,6 +334,9 @@ class PreviewHandler(BaseHTTPRequestHandler):
         else:
             set_status("操作対象が不正です。", True)
 
+    def handle_reboot(self, form):
+        set_status("再起動しています。プレビューでは再起動を省略します。")
+
     def handle_record(self, form):
         target = form.get("target", [""])[0]
         names = {"on": "点灯", "off": "消灯", "night": "常夜灯"}
@@ -322,6 +350,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    address = ("127.0.0.1", 8000)
+    args = parse_args()
+    address = ("127.0.0.1", args.port)
     print(f"Web UI preview: http://{address[0]}:{address[1]}")
     ThreadingHTTPServer(address, PreviewHandler).serve_forever()

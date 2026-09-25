@@ -1,1 +1,1 @@
-minify-html==0.18.1
+-r ../../components/device_common/tools/web/requirements.txt

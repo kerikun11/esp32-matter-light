@@ -127,7 +127,7 @@ IPアドレスはシリアルコンソールのログ、またはルーターの
 
 ![回路図](pcb/esp32-matter-light.svg)
 
-- ピンアサインはソースコード [app_config.h](firmware/main/app_config.h) を参照。
+- ピンアサインはソースコード [app_config.h](firmware/main/board/app_config.h) を参照。
 - 赤外線受光モジュール: OSRB38C9AA
   - 38kHzの一般的なもの。GPIOに接続するだけ。
 - 赤外線LED: OSI5FU3A11C
@@ -151,3 +151,7 @@ IPアドレスはシリアルコンソールのログ、またはルーターの
 ## ライセンス
 
 - LGPL v2.1
+
+## 開発
+
+[開発手順](docs/development.md)・[構成](docs/architecture.md)・[コーディングルール](docs/coding-rules.md)を参照してください。

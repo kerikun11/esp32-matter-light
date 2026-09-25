@@ -1,11 +1,8 @@
-# firmware/tools
+# 開発ツール
 
-ファームウェア開発用のスクリプト置き場。
-ビルド・書き込み・OTA更新の手順は[ファームウェア開発ガイド](../README.md)を参照してください。
+- `web/preview_server.py`: 製品のモックAPIを持つWebプレビュー。
+- `../components/device_common/tools/web/`: Web資産の結合・圧縮。
+- `../components/device_common/tools/ota/`: OTA更新CLI。
+- `../tests/`: 製品のホストテスト・実機検証。
 
-| ディレクトリ | 内容 |
-| --- | --- |
-| [web/](web/) | WebUI（`main/web/index.html`）の最小化・gzip圧縮ビルドと、実機なしのブラウザプレビュー |
-| [tests/](tests/) | ビルドパイプラインの自動テストと、実機向けの黒箱動作検証スクリプト |
-
-各ディレクトリのREADMEに使い方を記載しています。
+実行方法は [開発手順](../../docs/development.md) を参照。

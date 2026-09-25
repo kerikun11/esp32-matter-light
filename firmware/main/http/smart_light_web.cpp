@@ -1,0 +1,361 @@
+/**
+ * SPDX-License-Identifier: LGPL-2.1
+ * @copyright 2025 Ryotaro Onuki
+ */
+
+#include "http/smart_light_web.h"
+
+#include <cJSON.h>
+#include <esp_timer.h>
+#include <freertos/task.h>
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#include "device_common/http/device_http.h"
+#include "device_common/http/web_asset_http.h"
+#include "device_common/http/web_utils.h"
+#include "matter/matter_light.h"
+#include "web_assets.h"
+
+namespace {
+
+constexpr uint16_t kIrRecordTimeoutMs = 10000;
+constexpr uint16_t kIrResultIndicatorMs = 500;
+
+std::string requestHeader(httpd_req_t* req, const char* name) {
+  const size_t length = httpd_req_get_hdr_value_len(req, name);
+  if (length == 0) return {};
+  std::string value(length + 1, '\0');
+  if (httpd_req_get_hdr_value_str(req, name, value.data(), value.size()) != ESP_OK) return {};
+  value.resize(length);
+  return value;
+}
+
+}  // namespace
+
+void SmartLightWeb::begin() {
+  auto config = device_common::httpServerConfig();
+  if (httpd_start(&server_, &config) != ESP_OK) {
+    LOGE("[Web] httpd_start failed");
+    return;
+  }
+
+  const httpd_uri_t root_uri = {
+      .uri = "/", .method = HTTP_GET, .handler = &handleRootTrampoline, .user_ctx = this};
+  const httpd_uri_t settings_uri = {
+      .uri = "/settings", .method = HTTP_POST, .handler = &handleSaveSettingsTrampoline, .user_ctx = this};
+  const httpd_uri_t record_uri = {
+      .uri = "/record", .method = HTTP_POST, .handler = &handleRecordTrampoline, .user_ctx = this};
+  const httpd_uri_t action_uri = {
+      .uri = "/action", .method = HTTP_POST, .handler = &handleActionTrampoline, .user_ctx = this};
+  const httpd_uri_t state_uri = {
+      .uri = "/state", .method = HTTP_GET, .handler = &handleStateTrampoline, .user_ctx = this};
+  const httpd_uri_t info_uri = {
+      .uri = "/device-info", .method = HTTP_GET, .handler = &handleDeviceInfoTrampoline, .user_ctx = this};
+  const httpd_uri_t matter_uri = {
+      .uri = "/matter", .method = HTTP_POST, .handler = &handleMatterTrampoline, .user_ctx = this};
+  const httpd_uri_t reboot_uri = {
+      .uri = "/reboot", .method = HTTP_POST, .handler = &handleRebootTrampoline, .user_ctx = this};
+  httpd_register_uri_handler(server_, &matter_uri);
+  httpd_register_uri_handler(server_, &reboot_uri);
+  httpd_register_uri_handler(server_, &info_uri);
+  httpd_register_uri_handler(server_, &root_uri);
+  httpd_register_uri_handler(server_, &state_uri);
+  httpd_register_uri_handler(server_, &settings_uri);
+  httpd_register_uri_handler(server_, &record_uri);
+  httpd_register_uri_handler(server_, &action_uri);
+
+  LOGI("[Web] HTTP server started on port 80");
+}
+
+void SmartLightWeb::setObservedStates(bool light_state, bool switch_state,
+                                      bool night_state,
+                                      int ambient_light_percent) {
+  Lock lock(mutex_);
+  observed_light_state_ = light_state;
+  observed_switch_state_ = switch_state;
+  observed_night_state_ = night_state;
+  observed_ambient_light_percent_ = ambient_light_percent;
+}
+
+bool SmartLightWeb::hostnameUpdated() {
+  Lock lock(mutex_);
+  return hostname_updated_;
+}
+
+void SmartLightWeb::clearHostnameUpdated() {
+  Lock lock(mutex_);
+  hostname_updated_ = false;
+}
+
+bool SmartLightWeb::consumeRequestedLightState(bool& light_state) {
+  Lock lock(mutex_);
+  return requested_light_state_.consume(light_state);
+}
+
+bool SmartLightWeb::consumeRequestedSwitchState(bool& switch_state) {
+  Lock lock(mutex_);
+  return requested_switch_state_.consume(switch_state);
+}
+
+bool SmartLightWeb::consumeRequestedNightState(bool& night_state) {
+  Lock lock(mutex_);
+  return requested_night_state_.consume(night_state);
+}
+
+bool SmartLightWeb::consumeRebootRequested() {
+  Lock lock(mutex_);
+  if (!reboot_requested_ || esp_timer_get_time() < reboot_after_us_) return false;
+  reboot_requested_ = false;
+  return true;
+}
+
+void SmartLightWeb::completeAction() {
+  Lock lock(mutex_);
+  action_in_progress_ = false;
+}
+
+void SmartLightWeb::showStatus(const std::string& message, bool is_error) {
+  Lock lock(mutex_);
+  status_message_ = message;
+  status_is_error_ = is_error;
+}
+
+esp_err_t SmartLightWeb::handleRoot(httpd_req_t* req) {
+  logRequest(req);
+  return sendPage(req);
+}
+
+esp_err_t SmartLightWeb::handleSaveSettings(httpd_req_t* req) {
+  logRequest(req);
+  const auto fields = parseFormBody(req);
+  const std::string device_name = trim(formValue(fields, "device_name"));
+  const std::string hostname = trim(formValue(fields, "hostname"));
+  const int timeout_seconds = atoi(formValue(fields, "timeout").c_str());
+  const int ambient_threshold =
+      atoi(formValue(fields, "ambient_threshold").c_str());
+  if (device_name.empty() || device_name.length() > 64 || hostname.empty() ||
+      timeout_seconds <= 0 || ambient_threshold < 0 ||
+      ambient_threshold > 100) {
+    showStatus("入力内容を確認してください。設定は保存されませんでした。",
+               true);
+    return respondMutation(req);
+  }
+
+  {
+    Lock lock(mutex_);
+    settings_.device_name = device_name;
+    settings_.hostname = hostname;
+    settings_.light_off_timeout_seconds = timeout_seconds;
+    settings_.ambient_light_threshold_percent = ambient_threshold;
+    hostname_updated_ = true;
+  }
+  settings_store_.saveDeviceName(device_name);
+  settings_store_.saveHostname(hostname);
+  settings_store_.saveLightOffTimeoutSeconds(timeout_seconds);
+  settings_store_.saveAmbientLightThresholdPercent(ambient_threshold);
+  showStatus("基本設定を保存しました。");
+  return respondMutation(req);
+}
+
+esp_err_t SmartLightWeb::handleRecord(httpd_req_t* req) {
+  logRequest(req);
+  const auto fields = parseFormBody(req);
+  const std::string target = formValue(fields, "target");
+  if (target != "on" && target != "off" && target != "night") {
+    showStatus("赤外線リモコンの記録対象が不正です。", true);
+    return respondMutation(req);
+  }
+
+  ir_remote_.clear();
+  led_.blinkOnce(RgbLed::Color::kGreen, kIrRecordTimeoutMs + 1000);
+  if (!ir_remote_.waitForAvailable(kIrRecordTimeoutMs)) {
+    led_.blinkOnce(RgbLed::Color::kRed, kIrResultIndicatorMs);
+    showStatus("赤外線信号を受信できませんでした。もう一度お試しください。",
+               true);
+    return respondMutation(req);
+  }
+
+  const auto ir_data = ir_remote_.get();
+  std::string recorded_button;
+  if (target == "on") {
+    {
+      Lock lock(mutex_);
+      settings_.ir_data_light_on = ir_data;
+    }
+    settings_store_.saveIrDataLightOn(ir_data);
+    recorded_button = "点灯";
+  } else if (target == "off") {
+    {
+      Lock lock(mutex_);
+      settings_.ir_data_light_off = ir_data;
+    }
+    settings_store_.saveIrDataLightOff(ir_data);
+    recorded_button = "消灯";
+  } else {
+    {
+      Lock lock(mutex_);
+      settings_.ir_data_night = ir_data;
+    }
+    settings_store_.saveIrDataNight(ir_data);
+    recorded_button = "常夜灯";
+  }
+  led_.blinkOnce(RgbLed::Color::kGreen, kIrResultIndicatorMs);
+  showStatus(recorded_button + "ボタンの赤外線信号を記録しました。");
+  return respondMutation(req);
+}
+
+esp_err_t SmartLightWeb::handleAction(httpd_req_t* req) {
+  logRequest(req);
+  const auto fields = parseFormBody(req);
+  const std::string target = formValue(fields, "target");
+  const std::string state = formValue(fields, "state");
+  const bool enabled = state == "on";
+  LOGI("[Web] action target='%s' state='%s'", target.c_str(), state.c_str());
+  if (state != "on" && state != "off") {
+    LOGW("[Web] action rejected: state must be on/off, got '%s'",
+         state.c_str());
+    showStatus("操作内容が不正です。", true);
+    return respondMutation(req);
+  }
+
+  if (target == "light" || target == "switch" || target == "night") {
+    {
+      Lock lock(mutex_);
+      if (action_in_progress_) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        return httpd_resp_sendstr(req, "Previous action is still running");
+      }
+      action_in_progress_ = true;
+      if (target == "light") {
+        requested_light_state_.request(enabled);
+      } else if (target == "switch") {
+        requested_switch_state_.request(enabled);
+      } else {
+        requested_night_state_.request(enabled);
+      }
+    }
+    // Do not return a page until the controller has committed IR output and
+    // published all linked states. Never hold the mutex while sleeping.
+    const int64_t deadline = esp_timer_get_time() + 5000000;
+    while (true) {
+      bool complete;
+      {
+        Lock lock(mutex_);
+        complete = !action_in_progress_;
+      }
+      if (complete) {
+        return respondMutation(req);
+      }
+      if (esp_timer_get_time() >= deadline) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        return httpd_resp_sendstr(req, "Action result is not available yet");
+      }
+      vTaskDelay(pdMS_TO_TICKS(10));
+    }
+  }
+  if (target == "ambient") {
+    {
+      Lock lock(mutex_);
+      settings_.ambient_light_mode_enabled = enabled;
+    }
+    settings_store_.saveAmbientLightModeEnabled(enabled);
+    showStatus(std::string("明るさ連動を") +
+               (enabled ? "オン" : "オフ") + "にしました。");
+    return respondMutation(req);
+  }
+  if (target == "night_feature") {
+    {
+      Lock lock(mutex_);
+      settings_.night_light_feature_enabled = enabled;
+    }
+    settings_store_.saveNightLightFeatureEnabled(enabled);
+    showStatus(std::string("常夜灯エンドポイントを") +
+               (enabled ? "有効" : "無効") +
+               "にしました。再起動しています。");
+    {
+      Lock lock(mutex_);
+      reboot_requested_ = true;
+      reboot_after_us_ = esp_timer_get_time() + 500000;
+    }
+    return respondMutation(req);
+  }
+  showStatus("操作対象が不正です。", true);
+  return respondMutation(req);
+}
+
+esp_err_t SmartLightWeb::handleMatter(httpd_req_t* req) {
+  const auto result = device_common::handleMatterAction(req);
+  showStatus(result.message, result.failed);
+  return respondMutation(req);
+}
+
+esp_err_t SmartLightWeb::handleReboot(httpd_req_t* req) {
+  logRequest(req);
+  {
+    Lock lock(mutex_);
+    reboot_requested_ = true;
+    reboot_after_us_ = esp_timer_get_time() + 500000;
+  }
+  showStatus("再起動しています。");
+  return respondMutation(req);
+}
+
+esp_err_t SmartLightWeb::respondMutation(httpd_req_t* req) {
+  if (requestHeader(req, "Accept").find("application/json") != std::string::npos) {
+    return sendState(req);
+  }
+  redirectRoot(req);
+  return ESP_OK;
+}
+
+esp_err_t SmartLightWeb::sendPage(httpd_req_t* req) {
+  return device_common::sendWebPage(req, {kWebIdentity, sizeof(kWebIdentity), kWebIdentityEtag,
+                                          kWebGzip, sizeof(kWebGzip), kWebGzipEtag});
+}
+
+esp_err_t SmartLightWeb::sendState(httpd_req_t* req) {
+  cJSON* state = cJSON_CreateObject();
+  if (!state) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+  std::string message;
+  bool ok = true;
+  {
+    Lock lock(mutex_);
+    message = status_message_;
+    ok &= cJSON_AddBoolToObject(state, "light", observed_light_state_) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "switch", observed_switch_state_) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "night", observed_night_state_) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "ambient", settings_.ambient_light_mode_enabled) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "night_feature", settings_.night_light_feature_enabled) != nullptr;
+    ok &= cJSON_AddNumberToObject(state, "ambient_value", observed_ambient_light_percent_) != nullptr;
+    ok &= cJSON_AddStringToObject(state, "device_name", settings_.device_name.c_str()) != nullptr;
+    ok &= cJSON_AddStringToObject(state, "hostname", settings_.hostname.c_str()) != nullptr;
+    ok &= cJSON_AddNumberToObject(state, "timeout", settings_.light_off_timeout_seconds) != nullptr;
+    ok &= cJSON_AddNumberToObject(state, "ambient_threshold", settings_.ambient_light_threshold_percent) != nullptr;
+    ok &= cJSON_AddStringToObject(state, "message", message.c_str()) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "error", status_is_error_) != nullptr;
+    ok &= cJSON_AddBoolToObject(state, "reboot", reboot_requested_) != nullptr;
+  }
+  char* json = ok ? cJSON_PrintUnformatted(state) : nullptr;
+  cJSON_Delete(state);
+  if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+  httpd_resp_set_type(req, "application/json; charset=utf-8");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+  const esp_err_t result = httpd_resp_sendstr(req, json);
+  cJSON_free(json);
+  if (result == ESP_OK) {
+    Lock lock(mutex_);
+    if (status_message_ == message) {
+      status_message_.clear();
+      status_is_error_ = false;
+    }
+  }
+  return result;
+}
+
+// Read Matter under its stack lock, independently of the settings mutex.
+esp_err_t SmartLightWeb::sendDeviceInfo(httpd_req_t* req) {
+  return device_common::sendDeviceInfo(req, MatterLight::kManualCode, MatterLight::kQrPayload);
+}

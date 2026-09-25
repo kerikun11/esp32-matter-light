@@ -1,0 +1,5 @@
+BasedOnStyle: Google
+InsertNewlineAtEOF: true
+ColumnLimit: 0
+AllowShortEnumsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: WithoutElse
