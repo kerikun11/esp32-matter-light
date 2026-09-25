@@ -11,7 +11,8 @@
     *{box-sizing:border-box}
     [hidden]{display:none!important}
     body{margin:0;background:linear-gradient(180deg,#f8fbff,#eef3f9);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
-    main{max-width:720px;margin:0 auto;padding:24px 16px 40px}
+    main{max-width:720px;margin:0 auto;padding:16px}
+    footer{padding:0 0 16px;text-align:center;color:var(--muted);font-size:12px}
     .hero,.fold{overflow:hidden;border:1px solid var(--line);border-radius:20px;background:var(--panel);box-shadow:var(--shadow)}
     .hero{padding:24px}.hero h1{margin:0;font-size:28px;line-height:1.2}
     .topbar{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;margin-top:20px;align-items:stretch}
@@ -30,7 +31,6 @@
     .section-title{margin:0;font-size:16px}.section-description{margin:2px 0 0;color:var(--muted);font-size:13px}
     .settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
     .setting-card{padding:16px;border:1px solid var(--line);border-radius:14px;background:#fbfdff}
-    .setting-card.wide{grid-column:1/-1}
     .range-row{display:grid;grid-template-columns:1fr 52px;gap:12px;align-items:center}.range-row strong{text-align:right}
     input[type=text],input[type=number]{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit}
     input[type=range]{width:100%;accent-color:var(--accent)}
@@ -40,13 +40,13 @@
     button:disabled{cursor:wait}
     .save-row{padding:16px;border:1px solid #bfdbfe;border-radius:14px;background:#eff6ff}.save-row .mini{margin:0;color:#1e40af}.save-row button{min-width:150px}
     .device-section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
-    .info-list{margin:0;display:grid;gap:6px}.info-list dt{color:var(--muted);font-size:13px}.info-list dd{margin:0 0 8px;white-space:pre-line;overflow-wrap:anywhere}.fabric-list{display:grid;gap:12px}
+    .info-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}.info-table th,.info-table td{padding:10px 12px;border:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}.info-table th{width:36%;background:#fbfdff;color:var(--muted);font-weight:600}.info-table td{white-space:pre-line}.fabric-list{display:grid;gap:12px}
     .ir-section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
-    .fold summary{display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer;padding:18px 20px;font-size:17px;font-weight:700}
+    .fold summary{display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer;padding:16px 18px;font-size:17px;font-weight:700}
     .fold summary::-webkit-details-marker{display:none}.fold summary span{color:var(--muted);font-size:12px;font-weight:500}.fold .body{padding:0 20px 20px}
     .notice{margin-top:14px;padding:14px 18px;border:1px solid #f59e0b;border-radius:12px;background:#fef3c7;color:#92400e;font-size:14px}
     .status{margin-top:14px;padding:14px 18px;border:1px solid;border-radius:12px;font-weight:650}.status.success{border-color:#86efac;background:#f0fdf4;color:var(--good)}.status.error{border-color:#fca5a5;background:#fef2f2;color:var(--bad)}
-    @media(max-width:760px){main{padding:14px 10px 28px}.hero{padding:18px}.hero h1{font-size:25px}.topbar{grid-template-columns:1fr}.control-grid{grid-template-columns:1fr;gap:12px}.control-item{grid-template-columns:minmax(0,1fr) 110px;grid-template-rows:auto;align-items:center;gap:12px}.control-item .label{margin-bottom:0}.ambient-row{grid-template-columns:1fr 110px}.ambient-row .toggle-form{grid-column:2}.ambient-row .value{grid-column:1;grid-row:1;justify-self:start}.settings-grid{grid-template-columns:1fr}.setting-card.wide{grid-column:auto}.row{align-items:stretch}.save-row{flex-direction:column}.save-row button{width:100%}.fold summary{padding:16px}.fold .body{padding:0 16px 16px}.group{display:grid;grid-template-columns:1fr}}
+    @media(max-width:760px){main{padding:14px 10px 28px}.hero{padding:18px}.hero h1{font-size:25px}.topbar{grid-template-columns:1fr}.control-grid{grid-template-columns:1fr;gap:12px}.control-item{grid-template-columns:minmax(0,1fr) 110px;grid-template-rows:auto;align-items:center;gap:12px}.control-item .label{margin-bottom:0}.ambient-row{grid-template-columns:1fr 110px}.ambient-row .toggle-form{grid-column:2}.ambient-row .value{grid-column:1;grid-row:1;justify-self:start}.settings-grid{grid-template-columns:1fr}.row{align-items:stretch}.save-row{flex-direction:column}.save-row button{width:100%}.fold summary{padding:16px}.fold .body{padding:0 16px 16px}.group{display:grid;grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -111,7 +111,7 @@
               <p class="section-description">以下の項目は、画面下の「設定を保存」でまとめて反映されます。</p>
             </div>
             <div class="settings-grid">
-              <label class="field setting-card wide">
+              <label class="field setting-card">
                 <span>デバイス名</span>
                 <input name="device_name" type="text" maxlength="64" required value="スマートライト">
                 <span class="mini">タイトルとブラウザのタブに表示されます。</span>
@@ -126,7 +126,7 @@
                 <input name="timeout" type="number" min="1" inputmode="numeric" value="">
                 <span class="mini">人感センサ連動がオンの場合、この時間非検出が続いた場合に自動消灯します。</span>
               </label>
-              <div class="field setting-card wide">
+              <div class="field setting-card">
                 <span>明るさ連動の閾値</span>
                 <span class="mini">明るさ連動がオンの場合、この値を基準に明るさを判定します。</span>
                 <div class="range-row">
@@ -156,7 +156,7 @@
           <section class="device-section" aria-labelledby="info-title">
             <h2 id="info-title" class="section-title">デバイス情報</h2>
             <p id="info-status" class="section-description" role="status">設定を開くと最新情報を取得します。</p>
-            <dl id="device-info" class="info-list"></dl>
+            <table class="info-table" aria-labelledby="info-title"><tbody id="device-info"></tbody></table>
             <h3 class="section-title">Fabric一覧 <span id="fabric-count"></span></h3>
             <p class="section-description">このデバイスが登録されているMatterネットワークです。</p>
             <div id="fabric-list" class="fabric-list"></div>
@@ -176,6 +176,7 @@
       </details>
     </div>
   </main>
+  <footer>©2026 KERI's Lab</footer>
 <script>
 (() => {
   let submitting = true;
@@ -287,11 +288,14 @@
     catch (error) { notice('状態を取得できませんでした。ページを再読み込みしてください。', true); }
   }
   function infoRow(list, label, value) {
-    const term = document.createElement('dt');
-    const description = document.createElement('dd');
+    const row = document.createElement('tr');
+    const term = document.createElement('th');
+    const description = document.createElement('td');
+    term.scope = 'row';
     term.textContent = label;
     description.textContent = value;
-    list.append(term, description);
+    row.append(term, description);
+    list.append(row);
   }
   async function loadDeviceInfo() {
     get('info-status').textContent = '取得中…';
@@ -309,13 +313,16 @@
       infoRow(list, '稼働時間', Math.floor(info.uptime_seconds / 3600) + '時間 ' + Math.floor(info.uptime_seconds % 3600 / 60) + '分');
       get('fabric-count').textContent = '（' + info.fabrics.length + '件）';
       for (const fabric of info.fabrics) {
-        const card = document.createElement('dl');
-        card.className = 'info-list setting-card';
+        const table = document.createElement('table');
+        table.className = 'info-table';
+        table.setAttribute('aria-label', 'Fabric #' + fabric.index);
+        const card = document.createElement('tbody');
+        table.append(card);
         infoRow(card, 'Fabric #' + fabric.index, fabric.label || 'ラベルなし');
         infoRow(card, 'Fabric ID', fabric.fabric_id);
         infoRow(card, 'Node ID', fabric.node_id);
         infoRow(card, 'Vendor ID', fabric.vendor_id);
-        get('fabric-list').append(card);
+        get('fabric-list').append(table);
       }
       if (!info.fabrics.length) get('fabric-list').textContent = '登録済みのFabricはありません。';
       get('info-status').textContent = '設定ペインを開くたびに更新します。';

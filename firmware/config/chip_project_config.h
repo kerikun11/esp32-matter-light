@@ -24,7 +24,7 @@
  *
  * Human readable name of the device model.
  */
-#define CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_NAME "KERI's Lab Matter Device"
+#define CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_NAME "Matter Smart Light"
 
 /**
  * CHIP_DEVICE_CONFIG_DEVICE_PRODUCT_ID

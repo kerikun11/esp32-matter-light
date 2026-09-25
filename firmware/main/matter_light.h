@@ -12,6 +12,7 @@
 #include <esp_matter_cluster.h>
 #include <esp_matter_core.h>
 #include <esp_matter_endpoint.h>
+#include <esp_matter_feature.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -42,8 +43,8 @@ class MatterLight {
     bool night_state;
   };
 
-  static constexpr const char *kManualCode = "34970112332";
-  static constexpr const char *kQrUrl =
+  static constexpr const char* kManualCode = "34970112332";
+  static constexpr const char* kQrUrl =
       "https://project-chip.github.io/connectedhomeip/"
       "qrcode.html?data=MT:Y.K9042C00KA0648G00";
 
@@ -63,7 +64,8 @@ class MatterLight {
       cfg.on_off.on_off = initial_light_on;
       ep_light_ =
           esp_matter::endpoint::on_off_light::create(node_, &cfg, 0, this);
-      if (!ep_light_ || !setOnOffAttr_(ep_light_, initial_light_on)) {
+      if (!ep_light_ || !setEndpointLabel_(ep_light_, "照明") ||
+          !setOnOffAttr_(ep_light_, initial_light_on)) {
         ESP_LOGE(TAG, "light::create failed");
         return false;
       }
@@ -73,9 +75,10 @@ class MatterLight {
     {
       esp_matter::endpoint::on_off_plug_in_unit::config_t cfg{};
       cfg.on_off.on_off = initial_switch_on;
-      ep_plugin_ = esp_matter::endpoint::on_off_plug_in_unit::create(node_, &cfg,
-                                                                    0, this);
-      if (!ep_plugin_ || !setOnOffAttr_(ep_plugin_, initial_switch_on)) {
+      ep_plugin_ = esp_matter::endpoint::on_off_plug_in_unit::create(
+          node_, &cfg, 0, this);
+      if (!ep_plugin_ || !setEndpointLabel_(ep_plugin_, "人感") ||
+          !setOnOffAttr_(ep_plugin_, initial_switch_on)) {
         ESP_LOGE(TAG, "plugin::create failed");
         return false;
       }
@@ -85,9 +88,10 @@ class MatterLight {
     if (enable_night_endpoint) {
       esp_matter::endpoint::on_off_plug_in_unit::config_t cfg{};
       cfg.on_off.on_off = initial_night_on;
-      ep_night_ =
-          esp_matter::endpoint::on_off_plug_in_unit::create(node_, &cfg, 0, this);
-      if (!ep_night_ || !setOnOffAttr_(ep_night_, initial_night_on)) {
+      ep_night_ = esp_matter::endpoint::on_off_plug_in_unit::create(node_, &cfg,
+                                                                    0, this);
+      if (!ep_night_ || !setEndpointLabel_(ep_night_, "常夜灯") ||
+          !setOnOffAttr_(ep_night_, initial_night_on)) {
         ESP_LOGE(TAG, "night::create failed");
         return false;
       }
@@ -130,7 +134,7 @@ class MatterLight {
     return true;
   }
 
-  bool getEvent(Event &out, TickType_t ticks = portMAX_DELAY) {
+  bool getEvent(Event& out, TickType_t ticks = portMAX_DELAY) {
     return queue_ && (xQueueReceive(queue_, &out, ticks) == pdTRUE);
   }
 
@@ -143,7 +147,7 @@ class MatterLight {
     return chip::Server::GetInstance().GetFabricTable().FabricCount() > 0;
   }
   bool isCommissioned() const {
-    auto &srv = chip::Server::GetInstance();
+    auto& srv = chip::Server::GetInstance();
     return (srv.GetFabricTable().FabricCount() > 0) &&
            !srv.GetCommissioningWindowManager().IsCommissioningWindowOpen();
   }
@@ -153,7 +157,8 @@ class MatterLight {
   bool setNightState(bool on) { return setOnOffAttr_(ep_night_, on); }
 
   bool openCommissioningWindow(uint16_t timeout_seconds = 300) {
-    auto err = chip::Server::GetInstance().GetCommissioningWindowManager()
+    auto err = chip::Server::GetInstance()
+                   .GetCommissioningWindowManager()
                    .OpenBasicCommissioningWindow(
                        chip::System::Clock::Seconds32(timeout_seconds));
     if (err != CHIP_NO_ERROR) {
@@ -180,10 +185,9 @@ class MatterLight {
   // one with removeFabric().
   void listFabrics() const {
     ChipStackLock lock;
-    auto &table = chip::Server::GetInstance().GetFabricTable();
-    ESP_LOGI(TAG, "Fabrics (%u):",
-             static_cast<unsigned>(table.FabricCount()));
-    for (const auto &fabric : table) {
+    auto& table = chip::Server::GetInstance().GetFabricTable();
+    ESP_LOGI(TAG, "Fabrics (%u):", static_cast<unsigned>(table.FabricCount()));
+    for (const auto& fabric : table) {
       const auto label_span = fabric.GetFabricLabel();
       char label[34] = {};
       const size_t len = std::min(label_span.size(), sizeof(label) - 1);
@@ -213,7 +217,7 @@ class MatterLight {
   }
 
  private:
-  static constexpr const char *TAG = "MatterLight";
+  static constexpr const char* TAG = "MatterLight";
   static constexpr size_t kQueueSize = 8;
   static constexpr size_t kMaxInstances = 8;
 
@@ -227,10 +231,10 @@ class MatterLight {
   // at EventManagement.cpp:414.
   using ChipStackLock = chip::DeviceLayer::StackLock;
 
-  esp_matter::node_t *node_ = nullptr;
-  esp_matter::endpoint_t *ep_light_ = nullptr;
-  esp_matter::endpoint_t *ep_plugin_ = nullptr;
-  esp_matter::endpoint_t *ep_night_ = nullptr;
+  esp_matter::node_t* node_ = nullptr;
+  esp_matter::endpoint_t* ep_light_ = nullptr;
+  esp_matter::endpoint_t* ep_plugin_ = nullptr;
+  esp_matter::endpoint_t* ep_night_ = nullptr;
   QueueHandle_t queue_ = nullptr;
 
   // attrCb_ re-reads ALL THREE endpoints' current attribute values on every
@@ -249,12 +253,29 @@ class MatterLight {
   // (via setOnOffAttr_) is in flight.
   bool self_write_in_progress_ = false;
 
-  bool setOnOffAttr_(esp_matter::endpoint_t *ep, bool on) {
+  // The SDK copies the tag but retains its label span. Call with string
+  // literals so the UTF-8 text remains valid for the endpoint's lifetime.
+  static bool setEndpointLabel_(esp_matter::endpoint_t* ep, const char* label) {
+    auto* descriptor =
+        esp_matter::cluster::get(ep, chip::app::Clusters::Descriptor::Id);
+    if (esp_matter::cluster::descriptor::feature::tag_list::add(descriptor) !=
+        ESP_OK) {
+      return false;
+    }
+    chip::app::DataModel::Provider::SemanticTag tag{};
+    tag.mfgCode.SetNull();
+    tag.namespaceID = 0x43;  // Switches namespace
+    tag.tag = 0x08;          // Custom (requires a label)
+    tag.label.Emplace().SetNonNull(chip::CharSpan::fromCharString(label));
+    return esp_matter::endpoint::set_semantic_tags(ep, &tag, 1) == ESP_OK;
+  }
+
+  bool setOnOffAttr_(esp_matter::endpoint_t* ep, bool on) {
     if (!ep) return false;
-    auto *cluster =
+    auto* cluster =
         esp_matter::cluster::get(ep, chip::app::Clusters::OnOff::Id);
     if (!cluster) return false;
-    auto *attr = esp_matter::attribute::get(
+    auto* attr = esp_matter::attribute::get(
         cluster, chip::app::Clusters::OnOff::Attributes::OnOff::Id);
     if (!attr) return false;
     esp_matter_attr_val_t v = esp_matter_bool(on);
@@ -271,13 +292,13 @@ class MatterLight {
     return err == ESP_OK || err == ESP_ERR_NOT_FINISHED;
   }
 
-  bool readOnAttr_(esp_matter::endpoint_t *ep, bool &out) const {
+  bool readOnAttr_(esp_matter::endpoint_t* ep, bool& out) const {
     out = false;
     if (!ep) return false;
-    auto *cluster =
+    auto* cluster =
         esp_matter::cluster::get(ep, chip::app::Clusters::OnOff::Id);
     if (!cluster) return false;
-    auto *attr = esp_matter::attribute::get(
+    auto* attr = esp_matter::attribute::get(
         cluster, chip::app::Clusters::OnOff::Attributes::OnOff::Id);
     if (!attr) return false;
     esp_matter_attr_val_t v{};
@@ -288,25 +309,24 @@ class MatterLight {
 
   static esp_err_t attrCb_(esp_matter::attribute::callback_type_t type,
                            uint16_t endpoint_id, uint32_t cluster_id,
-                           uint32_t attribute_id, esp_matter_attr_val_t *val,
-                           void *) {
+                           uint32_t attribute_id, esp_matter_attr_val_t* val,
+                           void*) {
     if (type != esp_matter::attribute::POST_UPDATE ||
         cluster_id != chip::app::Clusters::OnOff::Id ||
-        attribute_id !=
-            chip::app::Clusters::OnOff::Attributes::OnOff::Id ||
+        attribute_id != chip::app::Clusters::OnOff::Attributes::OnOff::Id ||
         !val) {
       return ESP_OK;
     }
 
-    MatterLight *self = findOwnerByEndpoint_(endpoint_id);
+    MatterLight* self = findOwnerByEndpoint_(endpoint_id);
     if (!self) return ESP_OK;
     if (self->self_write_in_progress_) return ESP_OK;
 
     const uint16_t ep_light = esp_matter::endpoint::get_id(self->ep_light_);
     const uint16_t ep_plugin = esp_matter::endpoint::get_id(self->ep_plugin_);
-    const uint16_t ep_night = self->ep_night_
-                                  ? esp_matter::endpoint::get_id(self->ep_night_)
-                                  : 0xFFFF;
+    const uint16_t ep_night =
+        self->ep_night_ ? esp_matter::endpoint::get_id(self->ep_night_)
+                        : 0xFFFF;
     if (endpoint_id != ep_light && endpoint_id != ep_plugin &&
         endpoint_id != ep_night) {
       return ESP_OK;
@@ -345,11 +365,11 @@ class MatterLight {
     return ESP_OK;
   }
 
-  static MatterLight *&inst_(size_t i) {
-    static MatterLight *s[kMaxInstances]{};
+  static MatterLight*& inst_(size_t i) {
+    static MatterLight* s[kMaxInstances]{};
     return s[i];
   }
-  static bool registerInstance_(MatterLight *self) {
+  static bool registerInstance_(MatterLight* self) {
     for (size_t i = 0; i < kMaxInstances; ++i)
       if (!inst_(i)) {
         inst_(i) = self;
@@ -357,9 +377,9 @@ class MatterLight {
       }
     return false;
   }
-  static MatterLight *findOwnerByEndpoint_(uint16_t ep) {
+  static MatterLight* findOwnerByEndpoint_(uint16_t ep) {
     for (size_t i = 0; i < kMaxInstances; ++i) {
-      MatterLight *p = inst_(i);
+      MatterLight* p = inst_(i);
       if (!p) continue;
       if (p->ep_light_ && esp_matter::endpoint::get_id(p->ep_light_) == ep)
         return p;
