@@ -88,6 +88,10 @@ class SmartLightWeb {
   esp_err_t handleSaveSettings(httpd_req_t* req);
   esp_err_t handleRecord(httpd_req_t* req);
   esp_err_t handleAction(httpd_req_t* req);
+  esp_err_t handleMatter(httpd_req_t* req);
+  static esp_err_t handleMatterTrampoline(httpd_req_t* req) {
+    return static_cast<SmartLightWeb*>(req->user_ctx)->handleMatter(req);
+  }
   esp_err_t sendPage(httpd_req_t* req);
   esp_err_t sendState(httpd_req_t* req);
   esp_err_t sendDeviceInfo(httpd_req_t* req);

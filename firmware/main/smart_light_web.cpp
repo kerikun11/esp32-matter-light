@@ -40,7 +40,7 @@ std::string requestHeader(httpd_req_t* req, const char* name) {
 
 void SmartLightWeb::begin() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.max_uri_handlers = 8;
+  config.max_uri_handlers = 9;
   // max_open_sockets(7) reserves 3 for the server's own internal use, so
   // only ~4 slots are actually available to clients. Without this, once
   // those fill up with connections the client hasn't explicitly closed
@@ -72,6 +72,10 @@ void SmartLightWeb::begin() {
   const httpd_uri_t info_uri = {
       .uri = "/device-info", .method = HTTP_GET,
       .handler = &handleDeviceInfoTrampoline, .user_ctx = this};
+  const httpd_uri_t matter_uri = {
+      .uri = "/matter", .method = HTTP_POST,
+      .handler = &handleMatterTrampoline, .user_ctx = this};
+  httpd_register_uri_handler(server_, &matter_uri);
   httpd_register_uri_handler(server_, &info_uri);
   httpd_register_uri_handler(server_, &root_uri);
   httpd_register_uri_handler(server_, &state_uri);
@@ -283,6 +287,68 @@ esp_err_t SmartLightWeb::handleAction(httpd_req_t* req) {
   return respondMutation(req);
 }
 
+esp_err_t SmartLightWeb::handleMatter(httpd_req_t* req) {
+  logRequest(req);
+  const auto fields = parseFormBody(req);
+  const auto action = formValue(fields, "action");
+  std::string message;
+  bool failed = false;
+  // HTTP callbacks run outside the Matter task. Do not hold the settings
+  // mutex while taking the stack lock or invoking fabric callbacks.
+  {
+    chip::DeviceLayer::StackLock lock;
+    auto& server = chip::Server::GetInstance();
+    auto& table = server.GetFabricTable();
+    auto& window = server.GetCommissioningWindowManager();
+    if (action == "commission") {
+      if (window.IsCommissioningWindowOpen()) {
+        message = "ペアリング受付はすでに開始されています。";
+      } else {
+        const auto err = window.OpenBasicCommissioningWindow(
+            chip::System::Clock::Seconds32(300));
+        failed = err != CHIP_NO_ERROR;
+        message = failed ? "ペアリング受付を開始できませんでした。"
+                         : "ペアリング受付を開始しました（最大5分間）。";
+        if (failed) LOGE("[Web] Commissioning failed: %" CHIP_ERROR_FORMAT, err.Format());
+      }
+    } else if (action == "remove") {
+      const auto index_text = formValue(fields, "index");
+      const int index = index_text.size() <= 3 ? atoi(index_text.c_str()) : 0;
+      const auto* fabric = index >= 1 && index <= 254 &&
+                                   index_text == std::to_string(index)
+                               ? table.FindFabricWithIndex(static_cast<chip::FabricIndex>(index))
+                               : nullptr;
+      char fabric_id[19] = {}, node_id[19] = {}, vendor_id[7] = {};
+      if (fabric) {
+        snprintf(fabric_id, sizeof(fabric_id), "0x%016" PRIX64, fabric->GetFabricId());
+        snprintf(node_id, sizeof(node_id), "0x%016" PRIX64, fabric->GetNodeId());
+        snprintf(vendor_id, sizeof(vendor_id), "0x%04X", static_cast<unsigned>(fabric->GetVendorId()));
+      }
+      // Reject stale pages if an index has since been reused by another fabric.
+      if (!fabric || formValue(fields, "fabric_id") != fabric_id ||
+          formValue(fields, "node_id") != node_id ||
+          formValue(fields, "vendor_id") != vendor_id) {
+        failed = true;
+        message = "削除対象が見つからないか、登録情報が変わっています。一覧を確認してください。";
+      } else {
+        const auto err = table.Delete(static_cast<chip::FabricIndex>(index));
+        failed = err != CHIP_NO_ERROR;
+        message = failed ? "Fabricを削除できませんでした。"
+                         : "Fabric #" + index_text + "を削除しました。Wi-Fi接続は維持されます。";
+        if (!failed && table.FabricCount() == 0 && !window.IsCommissioningWindowOpen()) {
+          message += "再登録するにはペアリング受付を開始してください。";
+        }
+        if (failed) LOGE("[Web] Fabric removal failed: %" CHIP_ERROR_FORMAT, err.Format());
+      }
+    } else {
+      failed = true;
+      message = "Matterの操作内容が不正です。";
+    }
+  }
+  showStatus(message, failed);
+  return respondMutation(req);
+}
+
 esp_err_t SmartLightWeb::respondMutation(httpd_req_t* req) {
   if (requestHeader(req, "Accept").find("application/json") != std::string::npos) {
     return sendState(req);
@@ -393,6 +459,8 @@ esp_err_t SmartLightWeb::sendDeviceInfo(httpd_req_t* req) {
   ok &= fabrics != nullptr;
   if (fabrics) {
     chip::DeviceLayer::StackLock lock;
+    ok &= cJSON_AddBoolToObject(info, "commissioning_open",
+        chip::Server::GetInstance().GetCommissioningWindowManager().IsCommissioningWindowOpen()) != nullptr;
     for (const auto& fabric : chip::Server::GetInstance().GetFabricTable()) {
       auto* item = cJSON_CreateObject();
       if (!item) { ok = false; break; }

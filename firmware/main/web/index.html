@@ -41,6 +41,7 @@
     .save-row{padding:16px;border:1px solid #bfdbfe;border-radius:14px;background:#eff6ff}.save-row .mini{margin:0;color:#1e40af}.save-row button{min-width:150px}
     .device-section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
     .info-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}.info-table th,.info-table td{padding:10px 12px;border:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}.info-table th{width:36%;background:#fbfdff;color:var(--muted);font-weight:600}.info-table td{white-space:pre-line}.fabric-list{display:grid;gap:12px}
+    .fabric-entry{display:grid;gap:10px}.fabric-entry form{justify-self:end}button.danger{background:var(--bad)}
     .ir-section{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
     .fold summary{display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer;padding:16px 18px;font-size:17px;font-weight:700}
     .fold summary::-webkit-details-marker{display:none}.fold summary span{color:var(--muted);font-size:12px;font-weight:500}.fold .body{padding:0 20px 20px}
@@ -160,6 +161,14 @@
             <h3 class="section-title">Fabric一覧 <span id="fabric-count"></span></h3>
             <p class="section-description">このデバイスが登録されているMatterネットワークです。</p>
             <div id="fabric-list" class="fabric-list"></div>
+            <h3 class="section-title">Matterペアリング</h3>
+            <p id="commissioning-status" class="section-description" role="status">状態：未取得</p>
+            <form method="post" action="/matter">
+              <input type="hidden" name="action" value="commission">
+              <button id="commissioning-start" disabled>ペアリング受付を開始</button>
+            </form>
+            <p class="section-description">5分間、新しいMatterコントローラーへの登録を受け付けます。</p>
+            <p id="matter-result" class="section-description" role="status"></p>
           </section>
           <div class="ir-section">
             <div>
@@ -180,6 +189,11 @@
 <script>
 (() => {
   let submitting = true;
+  let infoGeneration = 0;
+  let infoLoading = false;
+  let infoKnown = false;
+  let commissioningOpen = false;
+  let fabricSignature = null;
   const get = (id) => document.getElementById(id);
   const buttons = () => document.querySelectorAll('button');
   const labels = new Map(Array.from(buttons(), (button) => [button, button.textContent]));
@@ -203,7 +217,7 @@
     buttons().forEach((button) => {
       button.classList.remove('pending');
       button.removeAttribute('aria-busy');
-      button.textContent = labels.get(button);
+      button.textContent = labels.get(button) || button.dataset.label;
       button.disabled = !!state.reboot;
     });
     document.querySelectorAll('.toggle-form').forEach((form) => {
@@ -231,6 +245,7 @@
     notice(state.message, state.error);
     document.querySelector('main').removeAttribute('aria-busy');
     submitting = !!state.reboot;
+    updateMatterButtons();
   }
 
   async function request(url, options = {}) {
@@ -253,7 +268,15 @@
     if (form.method.toLowerCase() !== 'post') return;
     event.preventDefault();
     if (submitting) return;
+    const isMatter = form.getAttribute('action') === '/matter';
+    if (isMatter && !infoKnown) return;
+    if (isMatter && form.dataset.confirm && !window.confirm(form.dataset.confirm)) return;
     submitting = true;
+    if (isMatter) {
+      ++infoGeneration;
+      infoKnown = false;
+      get('matter-result').textContent = '';
+    }
     const data = new FormData(form);
     const button = event.submitter;
     if (button && button.name) data.append(button.name, button.value);
@@ -270,15 +293,22 @@
     });
     notice('');
     try {
-      render(await request(form.action, {method: 'POST', body: new URLSearchParams(data)}));
+      const state = await request(form.getAttribute('action'), {method: 'POST', body: new URLSearchParams(data)});
+      render(state);
+      if (isMatter) {
+        get('matter-result').textContent = state.message;
+        await loadDeviceInfo();
+      }
     } catch (error) {
-      // A lost response does not mean the operation failed. Never resend it
-      // automatically or restore the pre-operation state as if it were current.
+      /* A lost response does not mean the operation failed. Never resend it
+         automatically or restore the pre-operation state as if it were current. */
       pending.forEach((item) => {
         item.textContent = '結果未確認';
         item.removeAttribute('aria-busy');
       });
-      notice('操作結果を確認できませんでした。ページを再読み込みして状態を確認してください。', true);
+      const message = '操作結果を確認できませんでした。ページを再読み込みして状態を確認してください。';
+      notice(message, true);
+      if (isMatter) get('matter-result').textContent = message;
     }
   });
   async function load() {
@@ -297,14 +327,25 @@
     row.append(term, description);
     list.append(row);
   }
+  function updateMatterButtons() {
+    document.querySelectorAll('form[action="/matter"] button').forEach((button) => {
+      button.disabled = submitting || !infoKnown ||
+        (button.id === 'commissioning-start' && commissioningOpen);
+    });
+  }
   async function loadDeviceInfo() {
-    get('info-status').textContent = '取得中…';
-    get('device-info').replaceChildren();
-    get('fabric-list').replaceChildren();
-    get('fabric-count').textContent = '';
+    const generation = ++infoGeneration;
+    infoLoading = true;
+    infoKnown = false;
+    updateMatterButtons();
     try {
       const info = await request('/device-info');
+      if (generation !== infoGeneration) return;
+      if (typeof info.commissioning_open !== 'boolean' || !Array.isArray(info.fabrics)) {
+        throw new Error('Invalid device info');
+      }
       const list = get('device-info');
+      list.replaceChildren();
       infoRow(list, 'IPv4アドレス', info.ipv4 || '未取得');
       infoRow(list, 'IPv6アドレス', info.ipv6.join('\n') || '未取得');
       infoRow(list, 'Wi-Fi', info.connected ? info.ssid + '（' + info.rssi + ' dBm）' : '未接続');
@@ -312,27 +353,70 @@
       infoRow(list, 'ESP-IDF', info.idf_version);
       infoRow(list, '稼働時間', Math.floor(info.uptime_seconds / 3600) + '時間 ' + Math.floor(info.uptime_seconds % 3600 / 60) + '分');
       get('fabric-count').textContent = '（' + info.fabrics.length + '件）';
-      for (const fabric of info.fabrics) {
-        const table = document.createElement('table');
-        table.className = 'info-table';
-        table.setAttribute('aria-label', 'Fabric #' + fabric.index);
-        const card = document.createElement('tbody');
-        table.append(card);
-        infoRow(card, 'Fabric #' + fabric.index, fabric.label || 'ラベルなし');
-        infoRow(card, 'Fabric ID', fabric.fabric_id);
-        infoRow(card, 'Node ID', fabric.node_id);
-        infoRow(card, 'Vendor ID', fabric.vendor_id);
-        get('fabric-list').append(table);
+      const signature = JSON.stringify(info.fabrics);
+      if (signature !== fabricSignature) {
+        get('fabric-list').replaceChildren();
+        for (const fabric of info.fabrics) {
+          const entry = document.createElement('div');
+          entry.className = 'fabric-entry';
+          const table = document.createElement('table');
+          table.className = 'info-table';
+          table.setAttribute('aria-label', 'Fabric #' + fabric.index);
+          const card = document.createElement('tbody');
+          table.append(card);
+          infoRow(card, 'Fabric #' + fabric.index, fabric.label || 'ラベルなし');
+          infoRow(card, 'Fabric ID', fabric.fabric_id);
+          infoRow(card, 'Node ID', fabric.node_id);
+          infoRow(card, 'Vendor ID', fabric.vendor_id);
+          const form = document.createElement('form');
+          form.method = 'post';
+          form.action = '/matter';
+          form.dataset.confirm = 'Fabric #' + fabric.index + '（' +
+            (fabric.label || 'ラベルなし') + '）を削除しますか？\n' +
+            'このFabricに属するコントローラーから操作できなくなります。Wi-Fi接続は維持されます。' +
+            (info.fabrics.length === 1 ? '\n最後のFabricです。削除後、再登録にはペアリング受付の開始が必要です。' : '');
+          for (const [name, value] of Object.entries({
+            action: 'remove', index: fabric.index, fabric_id: fabric.fabric_id,
+            node_id: fabric.node_id, vendor_id: fabric.vendor_id
+          })) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            form.append(input);
+          }
+          const button = document.createElement('button');
+          button.type = 'submit';
+          button.className = 'danger';
+          button.dataset.label = 'このFabricを削除';
+          button.textContent = button.dataset.label;
+          button.setAttribute('aria-label', 'Fabric #' + fabric.index + 'を削除');
+          form.append(button);
+          entry.append(table, form);
+          get('fabric-list').append(entry);
+        }
+        if (!info.fabrics.length) get('fabric-list').textContent = '登録済みのFabricはありません。';
+        fabricSignature = signature;
       }
-      if (!info.fabrics.length) get('fabric-list').textContent = '登録済みのFabricはありません。';
-      get('info-status').textContent = '設定ペインを開くたびに更新します。';
+      commissioningOpen = info.commissioning_open;
+      infoKnown = true;
+      get('commissioning-status').textContent = commissioningOpen
+        ? '状態：受付中（最大5分間）' : '状態：受付停止中';
+      get('info-status').textContent = '設定を開いている間、5秒ごとに更新します。';
     } catch (error) {
-      get('device-info').replaceChildren();
-      get('fabric-list').replaceChildren();
-      get('fabric-count').textContent = '';
-      get('info-status').textContent = '情報を取得できませんでした。設定ペインを開き直してください。';
+      if (generation !== infoGeneration) return;
+      get('commissioning-status').textContent = '状態：取得できませんでした';
+      get('info-status').textContent = '最新情報を取得できませんでした。自動で再取得します。';
+    } finally {
+      if (generation === infoGeneration) {
+        infoLoading = false;
+        updateMatterButtons();
+      }
     }
   }
+  setInterval(() => {
+    if (get('settings-pane').open && !document.hidden && !submitting && !infoLoading) loadDeviceInfo();
+  }, 5000);
   get('settings-pane').addEventListener('toggle', () => {
     if (get('settings-pane').open) loadDeviceInfo();
   });

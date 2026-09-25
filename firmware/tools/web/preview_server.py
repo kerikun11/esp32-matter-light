@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import hashlib
 import json
 import sys
+import time
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,6 +33,12 @@ class PreviewState:
     status_message: str = ""
     status_is_error: bool = False
     settings_open: bool = False
+    commissioning_until: float = 0
+    fabrics: list = field(default_factory=lambda: [
+        {"index": 1, "label": "サンプルFabric",
+         "fabric_id": "0xFEDCBA9876543210",
+         "node_id": "0x1234567890ABCDEF", "vendor_id": "0xFFF1"}
+    ])
 
 
 STATE = PreviewState()
@@ -180,14 +187,15 @@ class PreviewHandler(BaseHTTPRequestHandler):
         if path == "/": self.send_html()
         elif path == "/state": self.send_state()
         elif path == "/device-info":
+            with STATE_LOCK:
+                fabrics = [dict(fabric) for fabric in STATE.fabrics]
+                commissioning_open = time.monotonic() < STATE.commissioning_until
             content = json.dumps({
                 "version": "preview", "idf_version": "5.5.1",
                 "uptime_seconds": 3660, "connected": True,
                 "ssid": "Preview Wi-Fi", "rssi": -48,
                 "ipv4": "192.0.2.10", "ipv6": ["2001:db8::10", "fe80::10"],
-                "fabrics": [{"index": 1, "label": "サンプルFabric",
-                             "fabric_id": "0xFEDCBA9876543210",
-                             "node_id": "0x1234567890ABCDEF", "vendor_id": "0xFFF1"}],
+                "fabrics": fabrics, "commissioning_open": commissioning_open,
             }, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -204,11 +212,37 @@ class PreviewHandler(BaseHTTPRequestHandler):
                 self.handle_settings(form)
             elif self.path == "/action":
                 self.handle_action(form)
+            elif self.path == "/matter":
+                self.handle_matter(form)
             elif self.path == "/record":
                 self.handle_record(form)
             else:
                 set_status("不明な操作です。", True)
         self.respond_mutation()
+
+    def handle_matter(self, form):
+        action = form.get("action", [""])[0]
+        if action == "commission":
+            if time.monotonic() < STATE.commissioning_until:
+                set_status("ペアリング受付はすでに開始されています。")
+            else:
+                STATE.commissioning_until = time.monotonic() + 300
+                set_status("ペアリング受付を開始しました（最大5分間）。")
+        elif action == "remove":
+            target = next((f for f in STATE.fabrics
+                           if str(f["index"]) == form.get("index", [""])[0]
+                           and all(f[key] == form.get(key, [""])[0]
+                                   for key in ("fabric_id", "node_id", "vendor_id"))), None)
+            if target is None:
+                set_status("削除対象が見つからないか、登録情報が変わっています。一覧を確認してください。", True)
+                return
+            STATE.fabrics.remove(target)
+            message = f"Fabric #{target['index']}を削除しました。Wi-Fi接続は維持されます。"
+            if not STATE.fabrics and time.monotonic() >= STATE.commissioning_until:
+                message += "再登録するにはペアリング受付を開始してください。"
+            set_status(message)
+        else:
+            set_status("Matterの操作内容が不正です。", True)
 
     def handle_settings(self, form):
         device_name = form.get("device_name", [""])[0].strip()
