@@ -5,8 +5,6 @@
 
 #include "smart_light_controller.h"
 
-#include <algorithm>
-
 #include <esp_netif.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -14,6 +12,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <mdns.h>
+
+#include <algorithm>
 
 #include "app_log.h"
 #include "ota_service.h"
@@ -24,7 +24,7 @@ SmartLightController::SmartLightController()
       web_(settings_, settings_mutex_, settings_store_, ir_remote_, led_) {}
 
 void SmartLightController::begin() {
-  led_.setBackground(RgbLed::Color::Green);
+  led_.setBackground(RgbLed::Color::kGreen);
 
   if (!settings_store_.begin()) {
     LOGE("[Prefs] Failed to open settings");
@@ -44,7 +44,7 @@ void SmartLightController::begin() {
 }
 
 void SmartLightController::handle() {
-  syncWifiPowerSave_();
+  syncWifiPowerSave();
 
   btn_.update();
   led_.update();
@@ -59,20 +59,20 @@ void SmartLightController::handle() {
   if (web_.consumeRebootRequested()) {
     esp_restart();
   }
-  syncHostnames_();
+  syncHostnames();
 
-  SmartLightRuntimeState state = buildRuntimeState_();
+  SmartLightRuntimeState state = buildRuntimeState();
   const SmartLightRuntimeState previous_state = state;
-  WebAction web_action = WebAction::None;
+  WebAction web_action = WebAction::kNone;
   bool web_requested_value = false;
   if (web_.consumeRequestedLightState(state.light_state)) {
-    web_action = WebAction::Light;
+    web_action = WebAction::kLight;
     web_requested_value = state.light_state;
   } else if (web_.consumeRequestedSwitchState(state.switch_state)) {
-    web_action = WebAction::Switch;
+    web_action = WebAction::kSwitch;
     web_requested_value = state.switch_state;
   } else if (web_.consumeRequestedNightState(state.night_state)) {
-    web_action = WebAction::Night;
+    web_action = WebAction::kNight;
     web_requested_value = state.night_state;
   }
   const SmartLightRuntimeState directly_requested_state = state;
@@ -80,9 +80,9 @@ void SmartLightController::handle() {
   SmartLightAutomation::applyButtonPress(btn_.pressed(), state);
   applyIrInput(state);
   SmartLightAutomation::applyDerivedRules(previous_state, state);
-  reportWebAction_(web_action, web_requested_value, directly_requested_state,
-                   state);
-  commitOutputs_(state);
+  reportWebAction(web_action, web_requested_value, directly_requested_state,
+                  state);
+  commitOutputs(state);
   // Must come after commitOutputs_(): it can block for ~150ms sending an IR
   // signal, and the web UI's toggle buttons render from these values, so
   // publishing the PRE-commit state here would make the very redirect the
@@ -92,13 +92,13 @@ void SmartLightController::handle() {
   web_.setObservedStates(
       state.light_state, state.switch_state, state.night_state,
       static_cast<int>(brightness_sensor_.getNormalized() * 100.0f + 0.5f));
-  if (web_action != WebAction::None) web_.completeAction();
+  if (web_action != WebAction::kNone) web_.completeAction();
   updateOccupancyLog(state.occupancy_state);
   updateStatusLed(state);
   handleDecommission();
 }
 
-void SmartLightController::syncWifiPowerSave_() {
+void SmartLightController::syncWifiPowerSave() {
   constexpr int64_t kRetryIntervalMs = 1000;
   const int64_t now = esp_timer_get_time() / 1000;
   if (now - last_wifi_ps_attempt_ms_ < kRetryIntervalMs) return;
@@ -112,17 +112,17 @@ void SmartLightController::syncWifiPowerSave_() {
   }
 }
 
-void SmartLightController::syncHostnames_() {
+void SmartLightController::syncHostnames() {
   bool hostname_updated = command_handler_.handle();
   if (web_.hostnameUpdated()) {
     hostname_updated = true;
     web_.clearHostnameUpdated();
   }
 
-  syncAdditionalMdnsHostname_(hostname_updated);
+  syncAdditionalMdnsHostname(hostname_updated);
 }
 
-void SmartLightController::syncAdditionalMdnsHostname_(bool force) {
+void SmartLightController::syncAdditionalMdnsHostname(bool force) {
   constexpr int64_t kRetryIntervalMs = 1000;
   const int64_t now = esp_timer_get_time() / 1000;
   if (!force && now - last_mdns_sync_attempt_ms_ < kRetryIntervalMs) return;
@@ -195,7 +195,8 @@ void SmartLightController::syncAdditionalMdnsHostname_(bool force) {
     mdns_ipv4_address_ = ip_info.ip.addr;
     mdns_ipv6_addresses_ = ipv6_addresses;
     LOGI("[mDNS] Added additional hostname: %s.local -> " IPSTR
-         " (%u IPv6 addresses)", mdns_hostname_.c_str(), IP2STR(&ip_info.ip),
+         " (%u IPv6 addresses)",
+         mdns_hostname_.c_str(), IP2STR(&ip_info.ip),
          static_cast<unsigned>(ipv6_addresses.size()));
     return;
   }
@@ -212,11 +213,12 @@ void SmartLightController::syncAdditionalMdnsHostname_(bool force) {
   mdns_ipv4_address_ = ip_info.ip.addr;
   mdns_ipv6_addresses_ = ipv6_addresses;
   LOGI("[mDNS] Updated addresses: %s.local -> " IPSTR
-       " (%u IPv6 addresses)", mdns_hostname_.c_str(), IP2STR(&ip_info.ip),
+       " (%u IPv6 addresses)",
+       mdns_hostname_.c_str(), IP2STR(&ip_info.ip),
        static_cast<unsigned>(ipv6_addresses.size()));
 }
 
-SmartLightRuntimeState SmartLightController::buildRuntimeState_() const {
+SmartLightRuntimeState SmartLightController::buildRuntimeState() const {
   SmartLightRuntimeState state;
   state.light_state = last_light_state_;
   state.switch_state = last_switch_state_;
@@ -230,7 +232,7 @@ SmartLightRuntimeState SmartLightController::buildRuntimeState_() const {
   return state;
 }
 
-void SmartLightController::commitOutputs_(const SmartLightRuntimeState& state) {
+void SmartLightController::commitOutputs(const SmartLightRuntimeState& state) {
   const bool suppress_night_off_signal =
       last_night_state_ && !state.night_state && !last_light_state_ &&
       state.light_state;
@@ -242,10 +244,10 @@ void SmartLightController::commitOutputs_(const SmartLightRuntimeState& state) {
   commitLightState(state, suppress_light_off_signal);
 }
 
-void SmartLightController::sendIrSignal_(const IRRemote::IRData& data,
-                                         const char* label) {
+void SmartLightController::sendIrSignal(const IRRemote::IRData& data,
+                                        const char* label) {
   LOGW("[IR-Tx] %s (size: %zu)", label, data.size());
-  led_.blinkOnce(RgbLed::Color::Green);
+  led_.blinkOnce(RgbLed::Color::kGreen);
   ir_remote_.send(data);
   LOGW("[IR-Tx] %s sent", label);
   vTaskDelay(pdMS_TO_TICKS(100));
@@ -276,7 +278,7 @@ void SmartLightController::applyIrInput(SmartLightRuntimeState& state) {
       state.switch_state = !state.switch_state;
     }
     LOGW("[SwitchState] %d (IR)", state.switch_state);
-    led_.blinkOnce(RgbLed::Color::Green);
+    led_.blinkOnce(RgbLed::Color::kGreen);
     return;
   }
 
@@ -289,7 +291,7 @@ void SmartLightController::applyIrInput(SmartLightRuntimeState& state) {
       state.switch_state = !state.switch_state;
     }
     LOGW("[SwitchState] %d (IR)", state.switch_state);
-    led_.blinkOnce(RgbLed::Color::Green);
+    led_.blinkOnce(RgbLed::Color::kGreen);
     return;
   }
 
@@ -311,9 +313,9 @@ void SmartLightController::commitNightState(const SmartLightRuntimeState& state,
   matter_light_.setNightState(state.night_state);
 
   if (state.night_state) {
-    sendIrSignal_(settings_.ir_data_night, "Night ON");
+    sendIrSignal(settings_.ir_data_night, "Night ON");
   } else if (!suppress_off_signal) {
-    sendIrSignal_(settings_.ir_data_light_off, "Light OFF (Night OFF)");
+    sendIrSignal(settings_.ir_data_light_off, "Light OFF (Night OFF)");
   }
 }
 
@@ -325,9 +327,9 @@ void SmartLightController::commitLightState(const SmartLightRuntimeState& state,
   matter_light_.setLightState(state.light_state);
 
   if (state.light_state) {
-    sendIrSignal_(settings_.ir_data_light_on, "Light ON");
+    sendIrSignal(settings_.ir_data_light_on, "Light ON");
   } else if (!suppress_off_signal) {
-    sendIrSignal_(settings_.ir_data_light_off, "Light OFF");
+    sendIrSignal(settings_.ir_data_light_off, "Light OFF");
   }
 }
 
@@ -347,24 +349,24 @@ void SmartLightController::updateStatusLed(
       state, matter_light_.isCommissioned(), matter_light_.isConnected()));
 }
 
-void SmartLightController::reportWebAction_(
+void SmartLightController::reportWebAction(
     WebAction action, bool requested_value,
     const SmartLightRuntimeState& directly_requested_state,
     const SmartLightRuntimeState& final_state) {
-  if (action == WebAction::None) return;
+  if (action == WebAction::kNone) return;
 
   const char* action_label = "";
   switch (action) {
-    case WebAction::Light:
+    case WebAction::kLight:
       action_label = "照明";
       break;
-    case WebAction::Switch:
+    case WebAction::kSwitch:
       action_label = "人感センサ連動";
       break;
-    case WebAction::Night:
+    case WebAction::kNight:
       action_label = "常夜灯";
       break;
-    case WebAction::None:
+    case WebAction::kNone:
       return;
   }
 
@@ -378,15 +380,15 @@ void SmartLightController::reportWebAction_(
     linked_changes += value ? "をオン" : "をオフ";
   };
 
-  if (action != WebAction::Light &&
+  if (action != WebAction::kLight &&
       directly_requested_state.light_state != final_state.light_state) {
     append_change("照明", final_state.light_state);
   }
-  if (action != WebAction::Switch &&
+  if (action != WebAction::kSwitch &&
       directly_requested_state.switch_state != final_state.switch_state) {
     append_change("人感センサ連動", final_state.switch_state);
   }
-  if (action != WebAction::Night &&
+  if (action != WebAction::kNight &&
       directly_requested_state.night_state != final_state.night_state) {
     append_change("常夜灯", final_state.night_state);
   }
@@ -400,7 +402,7 @@ void SmartLightController::reportWebAction_(
 }
 
 void SmartLightController::handleDecommission() {
-  if (btn_.longHoldStarted()) led_.blinkOnce(RgbLed::Color::Magenta);
+  if (btn_.longHoldStarted()) led_.blinkOnce(RgbLed::Color::kMagenta);
   if (btn_.longPressed()) {
     if (matter_light_.isCommissioned()) {
       matter_light_.decommission();
@@ -410,10 +412,10 @@ void SmartLightController::handleDecommission() {
   }
 
   if (!matter_light_.isCommissioned()) {
-    static int64_t last_pairing_log_ms_ = 0;
+    static int64_t last_pairing_log_ms = 0;
     const int64_t now = esp_timer_get_time() / 1000;
-    if (now - last_pairing_log_ms_ > 10000) {
-      last_pairing_log_ms_ = now;
+    if (now - last_pairing_log_ms > 10000) {
+      last_pairing_log_ms = now;
       matter_light_.printOnboarding();
     }
   }

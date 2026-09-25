@@ -5,22 +5,23 @@
 
 #include "smart_light_web.h"
 
-#include <cstdlib>
-#include <cinttypes>
-#include <cstdio>
-#include <cstring>
+#include <app/server/Server.h>
+#include <cJSON.h>
 #include <esp_app_desc.h>
 #include <esp_netif.h>
-#include <esp_wifi.h>
-#include <app/server/Server.h>
-#include <platform/PlatformManager.h>
-#include <cJSON.h>
 #include <esp_timer.h>
+#include <esp_wifi.h>
 #include <freertos/task.h>
+#include <platform/PlatformManager.h>
 
-#include "web_utils.h"
+#include <cinttypes>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 #include "web_asset_http.h"
 #include "web_assets.h"
+#include "web_utils.h"
 
 namespace {
 
@@ -55,26 +56,19 @@ void SmartLightWeb::begin() {
   }
 
   const httpd_uri_t root_uri = {
-      .uri = "/", .method = HTTP_GET,
-      .handler = &handleRootTrampoline, .user_ctx = this};
+      .uri = "/", .method = HTTP_GET, .handler = &handleRootTrampoline, .user_ctx = this};
   const httpd_uri_t settings_uri = {
-      .uri = "/settings", .method = HTTP_POST,
-      .handler = &handleSaveSettingsTrampoline, .user_ctx = this};
+      .uri = "/settings", .method = HTTP_POST, .handler = &handleSaveSettingsTrampoline, .user_ctx = this};
   const httpd_uri_t record_uri = {
-      .uri = "/record", .method = HTTP_POST,
-      .handler = &handleRecordTrampoline, .user_ctx = this};
+      .uri = "/record", .method = HTTP_POST, .handler = &handleRecordTrampoline, .user_ctx = this};
   const httpd_uri_t action_uri = {
-      .uri = "/action", .method = HTTP_POST,
-      .handler = &handleActionTrampoline, .user_ctx = this};
+      .uri = "/action", .method = HTTP_POST, .handler = &handleActionTrampoline, .user_ctx = this};
   const httpd_uri_t state_uri = {
-      .uri = "/state", .method = HTTP_GET,
-      .handler = &handleStateTrampoline, .user_ctx = this};
+      .uri = "/state", .method = HTTP_GET, .handler = &handleStateTrampoline, .user_ctx = this};
   const httpd_uri_t info_uri = {
-      .uri = "/device-info", .method = HTTP_GET,
-      .handler = &handleDeviceInfoTrampoline, .user_ctx = this};
+      .uri = "/device-info", .method = HTTP_GET, .handler = &handleDeviceInfoTrampoline, .user_ctx = this};
   const httpd_uri_t matter_uri = {
-      .uri = "/matter", .method = HTTP_POST,
-      .handler = &handleMatterTrampoline, .user_ctx = this};
+      .uri = "/matter", .method = HTTP_POST, .handler = &handleMatterTrampoline, .user_ctx = this};
   httpd_register_uri_handler(server_, &matter_uri);
   httpd_register_uri_handler(server_, &info_uri);
   httpd_register_uri_handler(server_, &root_uri);
@@ -186,9 +180,9 @@ esp_err_t SmartLightWeb::handleRecord(httpd_req_t* req) {
   }
 
   ir_remote_.clear();
-  led_.blinkOnce(RgbLed::Color::Green, kIrRecordTimeoutMs + 1000);
+  led_.blinkOnce(RgbLed::Color::kGreen, kIrRecordTimeoutMs + 1000);
   if (!ir_remote_.waitForAvailable(kIrRecordTimeoutMs)) {
-    led_.blinkOnce(RgbLed::Color::Red, kIrResultIndicatorMs);
+    led_.blinkOnce(RgbLed::Color::kRed, kIrResultIndicatorMs);
     showStatus("赤外線信号を受信できませんでした。もう一度お試しください。",
                true);
     return respondMutation(req);
@@ -197,19 +191,28 @@ esp_err_t SmartLightWeb::handleRecord(httpd_req_t* req) {
   const auto ir_data = ir_remote_.get();
   std::string recorded_button;
   if (target == "on") {
-    { Lock lock(mutex_); settings_.ir_data_light_on = ir_data; }
+    {
+      Lock lock(mutex_);
+      settings_.ir_data_light_on = ir_data;
+    }
     settings_store_.saveIrDataLightOn(ir_data);
     recorded_button = "点灯";
   } else if (target == "off") {
-    { Lock lock(mutex_); settings_.ir_data_light_off = ir_data; }
+    {
+      Lock lock(mutex_);
+      settings_.ir_data_light_off = ir_data;
+    }
     settings_store_.saveIrDataLightOff(ir_data);
     recorded_button = "消灯";
   } else {
-    { Lock lock(mutex_); settings_.ir_data_night = ir_data; }
+    {
+      Lock lock(mutex_);
+      settings_.ir_data_night = ir_data;
+    }
     settings_store_.saveIrDataNight(ir_data);
     recorded_button = "常夜灯";
   }
-  led_.blinkOnce(RgbLed::Color::Green, kIrResultIndicatorMs);
+  led_.blinkOnce(RgbLed::Color::kGreen, kIrResultIndicatorMs);
   showStatus(recorded_button + "ボタンの赤外線信号を記録しました。");
   return respondMutation(req);
 }
@@ -223,7 +226,7 @@ esp_err_t SmartLightWeb::handleAction(httpd_req_t* req) {
   LOGI("[Web] action target='%s' state='%s'", target.c_str(), state.c_str());
   if (state != "on" && state != "off") {
     LOGW("[Web] action rejected: state must be on/off, got '%s'",
-        state.c_str());
+         state.c_str());
     showStatus("操作内容が不正です。", true);
     return respondMutation(req);
   }
@@ -264,14 +267,20 @@ esp_err_t SmartLightWeb::handleAction(httpd_req_t* req) {
     }
   }
   if (target == "ambient") {
-    { Lock lock(mutex_); settings_.ambient_light_mode_enabled = enabled; }
+    {
+      Lock lock(mutex_);
+      settings_.ambient_light_mode_enabled = enabled;
+    }
     settings_store_.saveAmbientLightModeEnabled(enabled);
     showStatus(std::string("明るさ連動を") +
                (enabled ? "オン" : "オフ") + "にしました。");
     return respondMutation(req);
   }
   if (target == "night_feature") {
-    { Lock lock(mutex_); settings_.night_light_feature_enabled = enabled; }
+    {
+      Lock lock(mutex_);
+      settings_.night_light_feature_enabled = enabled;
+    }
     settings_store_.saveNightLightFeatureEnabled(enabled);
     showStatus(std::string("常夜灯エンドポイントを") +
                (enabled ? "有効" : "無効") +
@@ -378,8 +387,8 @@ esp_err_t SmartLightWeb::sendPage(httpd_req_t* req) {
     return httpd_resp_send(req, nullptr, 0);
   }
   return httpd_resp_send(req,
-      reinterpret_cast<const char*>(gzip ? kWebGzip : kWebIdentity),
-      gzip ? sizeof(kWebGzip) : sizeof(kWebIdentity));
+                         reinterpret_cast<const char*>(gzip ? kWebGzip : kWebIdentity),
+                         gzip ? sizeof(kWebGzip) : sizeof(kWebIdentity));
 }
 
 esp_err_t SmartLightWeb::sendState(httpd_req_t* req) {
@@ -452,7 +461,10 @@ esp_err_t SmartLightWeb::sendDeviceInfo(httpd_req_t* req) {
     for (int i = 0; i < count; ++i) {
       snprintf(address, sizeof(address), IPV6STR, IPV62STR(addresses[i]));
       auto* item = cJSON_CreateString(address);
-      if (!item || !cJSON_AddItemToArray(ipv6, item)) { cJSON_Delete(item); ok = false; }
+      if (!item || !cJSON_AddItemToArray(ipv6, item)) {
+        cJSON_Delete(item);
+        ok = false;
+      }
     }
   }
   auto* fabrics = cJSON_AddArrayToObject(info, "fabrics");
@@ -460,10 +472,13 @@ esp_err_t SmartLightWeb::sendDeviceInfo(httpd_req_t* req) {
   if (fabrics) {
     chip::DeviceLayer::StackLock lock;
     ok &= cJSON_AddBoolToObject(info, "commissioning_open",
-        chip::Server::GetInstance().GetCommissioningWindowManager().IsCommissioningWindowOpen()) != nullptr;
+                                chip::Server::GetInstance().GetCommissioningWindowManager().IsCommissioningWindowOpen()) != nullptr;
     for (const auto& fabric : chip::Server::GetInstance().GetFabricTable()) {
       auto* item = cJSON_CreateObject();
-      if (!item) { ok = false; break; }
+      if (!item) {
+        ok = false;
+        break;
+      }
       const auto label = fabric.GetFabricLabel();
       const std::string label_text(label.data(), label.size());
       char node_id[19], fabric_id[19], vendor_id[7];
@@ -476,7 +491,10 @@ esp_err_t SmartLightWeb::sendDeviceInfo(httpd_req_t* req) {
       ok &= cJSON_AddStringToObject(item, "node_id", node_id) != nullptr;
       ok &= cJSON_AddStringToObject(item, "fabric_id", fabric_id) != nullptr;
       ok &= cJSON_AddStringToObject(item, "vendor_id", vendor_id) != nullptr;
-      if (!cJSON_AddItemToArray(fabrics, item)) { cJSON_Delete(item); ok = false; }
+      if (!cJSON_AddItemToArray(fabrics, item)) {
+        cJSON_Delete(item);
+        ok = false;
+      }
     }
   }
   char* json = ok ? cJSON_PrintUnformatted(info) : nullptr;

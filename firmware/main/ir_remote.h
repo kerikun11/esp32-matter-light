@@ -21,10 +21,10 @@
 
 class IRRemote {
  public:
-  static constexpr const int RAW_DATA_BUFFER_SIZE = 800;
-  static constexpr const int RAW_DATA_MIN_SIZE = 8;
-  static constexpr const int RAW_DATA_TIMEOUT_US = 40'000;
-  static constexpr const int IR_FINALIZING_TIMEOUT_US = 100'000;
+  static constexpr const int kRawDataBufferSize = 800;
+  static constexpr const int kRawDataMinSize = 8;
+  static constexpr const int kRawDataTimeoutUs = 40'000;
+  static constexpr const int kIrFinalizingTimeoutUs = 100'000;
   using IRDataElement = uint16_t;
   using IRData = std::vector<IRDataElement>;
 
@@ -47,19 +47,19 @@ class IRRemote {
                                   IRData& data);
 
  private:
-  enum class IR_RECEIVER_STATE {
-    IR_RECEIVER_OFF,
-    IR_RECEIVER_START,
-    IR_RECEIVER_RECEIVING,
-    IR_RECEIVER_WAITING_BLANK,
-    IR_RECEIVER_FINALIZING,
-    IR_RECEIVER_AVAILABLE,
+  enum class IrReceiverState {
+    kIrReceiverOff,
+    kIrReceiverStart,
+    kIrReceiverReceiving,
+    kIrReceiverWaitingBlank,
+    kIrReceiverFinalizing,
+    kIrReceiverAvailable,
   };
 
   gpio_num_t pin_tx_, pin_rx_;
-  volatile IR_RECEIVER_STATE state_;
+  volatile IrReceiverState state_;
   uint16_t raw_index_;
-  uint16_t raw_data_[RAW_DATA_BUFFER_SIZE];
+  uint16_t raw_data_[kRawDataBufferSize];
   volatile uint64_t prev_us_;
   portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 
@@ -72,7 +72,7 @@ class IRRemote {
 inline void IRRemote::begin(int tx, int rx) {
   pin_tx_ = static_cast<gpio_num_t>(tx);
   pin_rx_ = static_cast<gpio_num_t>(rx);
-  state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
+  state_ = IrReceiverState::kIrReceiverStart;
 
   gpio_config_t tx_cfg = {};
   tx_cfg.pin_bit_mask = 1ULL << pin_tx_;
@@ -96,7 +96,7 @@ inline void IRRemote::begin(int tx, int rx) {
 
 inline void IRRemote::clear() {
   LOGD("[IR] clear");
-  state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
+  state_ = IrReceiverState::kIrReceiverStart;
 }
 
 inline bool IRRemote::available() {
@@ -104,33 +104,33 @@ inline bool IRRemote::available() {
   uint32_t diff = static_cast<uint32_t>(esp_timer_get_time() - prev_us_);
   portEXIT_CRITICAL(&mux_);
   switch (state_) {
-    case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
-    case IR_RECEIVER_STATE::IR_RECEIVER_START:
-    case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
+    case IrReceiverState::kIrReceiverOff:
+    case IrReceiverState::kIrReceiverStart:
+    case IrReceiverState::kIrReceiverAvailable:
       break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
-      if (diff > RAW_DATA_TIMEOUT_US)
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_WAITING_BLANK;
+    case IrReceiverState::kIrReceiverReceiving:
+      if (diff > kRawDataTimeoutUs)
+        state_ = IrReceiverState::kIrReceiverWaitingBlank;
       break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_WAITING_BLANK:
-      if (diff > IR_FINALIZING_TIMEOUT_US)
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
+    case IrReceiverState::kIrReceiverWaitingBlank:
+      if (diff > kIrFinalizingTimeoutUs)
+        state_ = IrReceiverState::kIrReceiverFinalizing;
       break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
-      if (raw_index_ < RAW_DATA_MIN_SIZE) {
+    case IrReceiverState::kIrReceiverFinalizing:
+      if (raw_index_ < kRawDataMinSize) {
         LOGD("[IR] Raw Data Size: %d (skipped)", raw_index_);
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
+        state_ = IrReceiverState::kIrReceiverStart;
         break;
-      } else if (raw_index_ >= RAW_DATA_BUFFER_SIZE) {
+      } else if (raw_index_ >= kRawDataBufferSize) {
         LOGE("[IR] Raw Data Size: %d (overflow)", raw_index_);
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_START;
+        state_ = IrReceiverState::kIrReceiverStart;
         break;
       }
       LOGI("[IR] Raw Data Size: %d", raw_index_);
-      state_ = IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
+      state_ = IrReceiverState::kIrReceiverAvailable;
       break;
   }
-  return state_ == IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE;
+  return state_ == IrReceiverState::kIrReceiverAvailable;
 }
 
 inline bool IRRemote::waitForAvailable(int timeout_ms) {
@@ -165,8 +165,8 @@ inline void IRRemote::send(const IRData& data) {
   // ported from, does.
   portENTER_CRITICAL(&mux_);
   {
-    enum IR_RECEIVER_STATE state_cache = state_;
-    state_ = IR_RECEIVER_STATE::IR_RECEIVER_OFF;
+    enum IrReceiverState state_cache = state_;
+    state_ = IrReceiverState::kIrReceiverOff;
     for (uint16_t count = 0; count < data.size(); count++) {
       uint64_t us = esp_timer_get_time();
       uint16_t time = data[count];
@@ -189,24 +189,24 @@ inline void IRRemote::isr() {
   uint32_t diff = static_cast<uint32_t>(us - prev_us_);
 
   switch (state_) {
-    case IR_RECEIVER_STATE::IR_RECEIVER_OFF:
-    case IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING:
-    case IR_RECEIVER_STATE::IR_RECEIVER_AVAILABLE:
+    case IrReceiverState::kIrReceiverOff:
+    case IrReceiverState::kIrReceiverFinalizing:
+    case IrReceiverState::kIrReceiverAvailable:
       break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_START:
+    case IrReceiverState::kIrReceiverStart:
       raw_index_ = 0;
-      state_ = IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING;
+      state_ = IrReceiverState::kIrReceiverReceiving;
       break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_RECEIVING:
-      if (diff > RAW_DATA_TIMEOUT_US) {
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_WAITING_BLANK;
+    case IrReceiverState::kIrReceiverReceiving:
+      if (diff > kRawDataTimeoutUs) {
+        state_ = IrReceiverState::kIrReceiverWaitingBlank;
         break;
       }
-      if (raw_index_ < RAW_DATA_BUFFER_SIZE) raw_data_[raw_index_++] = diff;
+      if (raw_index_ < kRawDataBufferSize) raw_data_[raw_index_++] = diff;
       break;
-    case IR_RECEIVER_STATE::IR_RECEIVER_WAITING_BLANK:
-      if (diff > IR_FINALIZING_TIMEOUT_US)
-        state_ = IR_RECEIVER_STATE::IR_RECEIVER_FINALIZING;
+    case IrReceiverState::kIrReceiverWaitingBlank:
+      if (diff > kIrFinalizingTimeoutUs)
+        state_ = IrReceiverState::kIrReceiverFinalizing;
       break;
   }
 

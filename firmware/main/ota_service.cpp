@@ -162,12 +162,8 @@ esp_err_t handleVersion(httpd_req_t* req) {
 }  // namespace
 
 void registerOtaHandlers(httpd_handle_t server) {
-  const httpd_uri_t update_uri = {.uri = "/update", .method = HTTP_POST,
-                                  .handler = &handleUpdate,
-                                  .user_ctx = nullptr};
-  const httpd_uri_t version_uri = {.uri = "/version", .method = HTTP_GET,
-                                   .handler = &handleVersion,
-                                   .user_ctx = nullptr};
+  const httpd_uri_t update_uri = {.uri = "/update", .method = HTTP_POST, .handler = &handleUpdate, .user_ctx = nullptr};
+  const httpd_uri_t version_uri = {.uri = "/version", .method = HTTP_GET, .handler = &handleVersion, .user_ctx = nullptr};
   httpd_register_uri_handler(server, &update_uri);
   httpd_register_uri_handler(server, &version_uri);
 }

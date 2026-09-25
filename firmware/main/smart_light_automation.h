@@ -42,9 +42,9 @@ class SmartLightAutomation {
                                          bool commissioned, bool connected);
 
  private:
-  static void applyLightNightInterlock_(const SmartLightStateDelta& delta,
-                                        SmartLightRuntimeState& state);
-  static void applyNightSwitchInterlock_(SmartLightRuntimeState& state);
-  static void syncSwitchStateFromLight_(const SmartLightStateDelta& delta,
-                                        SmartLightRuntimeState& state);
+  static void applyLightNightInterlock(const SmartLightStateDelta& delta,
+                                       SmartLightRuntimeState& state);
+  static void applyNightSwitchInterlock(SmartLightRuntimeState& state);
+  static void syncSwitchStateFromLight(const SmartLightStateDelta& delta,
+                                       SmartLightRuntimeState& state);
 };

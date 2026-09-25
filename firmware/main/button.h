@@ -8,10 +8,10 @@
 
 class Button {
  public:
-  Button(int pin, uint32_t longPressMs = 5000, uint32_t debounceMs = 20)
+  Button(int pin, uint32_t long_press_ms = 5000, uint32_t debounce_ms = 20)
       : pin_(static_cast<gpio_num_t>(pin)),
-        long_press_ms_(longPressMs),
-        debounce_ms_(debounceMs) {
+        long_press_ms_(long_press_ms),
+        debounce_ms_(debounce_ms) {
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << pin_;
     cfg.mode = GPIO_MODE_INPUT;

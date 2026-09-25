@@ -22,7 +22,8 @@ inline float quality(std::string_view header, std::string_view coding) {
     header = comma == header.npos ? std::string_view{} : header.substr(comma + 1);
     const auto semicolon = item.find(';');
     std::string name(trim(item.substr(0, semicolon)));
-    for (char& ch : name) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+    for (char& ch : name)
+      if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
     float q = 1;
     if (semicolon != item.npos) {
       const auto parameter = trim(item.substr(semicolon + 1));

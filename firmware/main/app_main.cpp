@@ -27,7 +27,7 @@ void initNvs() {
 
 }  // namespace
 
-SmartLightController app_;
+SmartLightController app;
 
 extern "C" void app_main() {
   // app_log.h writes with plain fprintf(stdout, ...); without this, stdout
@@ -47,9 +47,9 @@ extern "C" void app_main() {
   esp_log_level_set("esp_matter_command", ESP_LOG_WARN);
   esp_log_level_set("ROUTE_HOOK", ESP_LOG_WARN);
 
-  app_.begin();
+  app.begin();
   while (true) {
-    app_.handle();
+    app.handle();
     vTaskDelay(1);
   }
 }

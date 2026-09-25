@@ -49,7 +49,7 @@ class Preferences {
   bool putString(const char* key, const std::string& value) {
     if (!open_) return false;
     return nvs_set_str(handle_, key, value.c_str()) == ESP_OK &&
-          nvs_commit(handle_) == ESP_OK;
+           nvs_commit(handle_) == ESP_OK;
   }
 
   int32_t getInt(const char* key, int32_t default_value = 0) const {
@@ -63,7 +63,7 @@ class Preferences {
   bool putInt(const char* key, int32_t value) {
     if (!open_) return false;
     return nvs_set_i32(handle_, key, value) == ESP_OK &&
-          nvs_commit(handle_) == ESP_OK;
+           nvs_commit(handle_) == ESP_OK;
   }
 
   bool getBool(const char* key, bool default_value = false) const {
@@ -77,7 +77,7 @@ class Preferences {
   bool putBool(const char* key, bool value) {
     if (!open_) return false;
     return nvs_set_u8(handle_, key, value ? 1 : 0) == ESP_OK &&
-          nvs_commit(handle_) == ESP_OK;
+           nvs_commit(handle_) == ESP_OK;
   }
 
   size_t getBytesLength(const char* key) const {

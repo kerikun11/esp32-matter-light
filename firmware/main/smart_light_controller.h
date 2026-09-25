@@ -33,7 +33,12 @@ class SmartLightController {
   void handle();
 
  private:
-  enum class WebAction { None, Light, Switch, Night };
+  enum class WebAction {
+    kNone,
+    kLight,
+    kSwitch,
+    kNight
+  };
 
   Button btn_{CONFIG_APP_PIN_BUTTON};
   RgbLed led_{CONFIG_APP_PIN_RGB_LED};
@@ -60,12 +65,12 @@ class SmartLightController {
   int64_t last_mdns_sync_attempt_ms_ = 0;
   esp_err_t last_mdns_error_ = ESP_OK;
   int64_t last_wifi_ps_attempt_ms_ = 0;
-  void syncHostnames_();
-  void syncAdditionalMdnsHostname_(bool force);
-  void syncWifiPowerSave_();
-  SmartLightRuntimeState buildRuntimeState_() const;
-  void commitOutputs_(const SmartLightRuntimeState& state);
-  void sendIrSignal_(const IRRemote::IRData& data, const char* label);
+  void syncHostnames();
+  void syncAdditionalMdnsHostname(bool force);
+  void syncWifiPowerSave();
+  SmartLightRuntimeState buildRuntimeState() const;
+  void commitOutputs(const SmartLightRuntimeState& state);
+  void sendIrSignal(const IRRemote::IRData& data, const char* label);
   void applyMatterEvents(SmartLightRuntimeState& state);
   void applyIrInput(SmartLightRuntimeState& state);
   void commitSwitchState(const SmartLightRuntimeState& state);
@@ -75,8 +80,8 @@ class SmartLightController {
                         bool suppress_off_signal);
   void updateOccupancyLog(bool occupancy_state);
   void updateStatusLed(const SmartLightRuntimeState& state);
-  void reportWebAction_(WebAction action, bool requested_value,
-                        const SmartLightRuntimeState& directly_requested_state,
-                        const SmartLightRuntimeState& final_state);
+  void reportWebAction(WebAction action, bool requested_value,
+                       const SmartLightRuntimeState& directly_requested_state,
+                       const SmartLightRuntimeState& final_state);
   void handleDecommission();
 };

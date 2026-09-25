@@ -17,7 +17,7 @@
 /* app log base */
 #define APP_LOG_BASE(l, c, f, ...)                                \
   do {                                                            \
-    const auto us = esp_timer_get_time();                          \
+    const auto us = esp_timer_get_time();                         \
     fprintf(stdout,                                               \
             c "[" l "][%d.%06d][" __FILE__                        \
               ":" APP_LOG_TO_STRING(__LINE__) "]\e[0m " f "\n",   \

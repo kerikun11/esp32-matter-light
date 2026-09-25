@@ -10,7 +10,16 @@
 
 class RgbLed {
  public:
-  enum class Color { Off, Red, Green, Blue, Yellow, Cyan, Magenta, White };
+  enum class Color {
+    kOff,
+    kRed,
+    kGreen,
+    kBlue,
+    kYellow,
+    kCyan,
+    kMagenta,
+    kWhite
+  };
 
   explicit RgbLed(int pin) {
     led_strip_config_t strip_cfg = {};
@@ -27,18 +36,18 @@ class RgbLed {
 
   void setBackground(Color color) { setColor(color, /*is_background=*/true); }
 
-  void off() { setBackground(Color::Off); }
+  void off() { setBackground(Color::kOff); }
 
-  void blinkOnce(Color color, uint16_t durationMs = 200) {
-    blinkStart_ = esp_timer_get_time() / 1000;
-    blinkDuration_ = durationMs;
+  void blinkOnce(Color color, uint16_t duration_ms = 200) {
+    blink_start_ = esp_timer_get_time() / 1000;
+    blink_duration_ = duration_ms;
     blinking_ = true;
     setColor(color, /*is_background=*/false);
   }
 
   void update() {
     if (blinking_ &&
-        esp_timer_get_time() / 1000 - blinkStart_ >= blinkDuration_) {
+        esp_timer_get_time() / 1000 - blink_start_ >= blink_duration_) {
       write(r_, g_, b_);
       blinking_ = false;
     }
@@ -51,8 +60,8 @@ class RgbLed {
   uint8_t b_ = 0;
 
   bool blinking_ = false;
-  int64_t blinkStart_ = 0;
-  uint16_t blinkDuration_ = 0;
+  int64_t blink_start_ = 0;
+  uint16_t blink_duration_ = 0;
 
   void write(uint8_t r, uint8_t g, uint8_t b) {
     if (!strip_) return;
@@ -61,51 +70,51 @@ class RgbLed {
   }
 
   void setColor(Color color, bool is_background) {
-    uint8_t rawR = 0, rawG = 0, rawB = 0;
+    uint8_t raw_r = 0, raw_g = 0, raw_b = 0;
     switch (color) {
-      case Color::Off:
+      case Color::kOff:
         break;
-      case Color::Red:
-        rawR = 255;
+      case Color::kRed:
+        raw_r = 255;
         break;
-      case Color::Green:
-        rawG = 255;
+      case Color::kGreen:
+        raw_g = 255;
         break;
-      case Color::Blue:
-        rawB = 255;
+      case Color::kBlue:
+        raw_b = 255;
         break;
-      case Color::Yellow:
-        rawR = rawG = 255;
+      case Color::kYellow:
+        raw_r = raw_g = 255;
         break;
-      case Color::Cyan:
-        rawG = rawB = 255;
+      case Color::kCyan:
+        raw_g = raw_b = 255;
         break;
-      case Color::Magenta:
-        rawR = rawB = 255;
+      case Color::kMagenta:
+        raw_r = raw_b = 255;
         break;
-      case Color::White:
-        rawR = rawG = rawB = 255;
+      case Color::kWhite:
+        raw_r = raw_g = raw_b = 255;
         break;
     }
 
-    uint8_t total = rawR + rawG + rawB;
-    uint8_t scaledR = 0, scaledG = 0, scaledB = 0;
+    uint8_t total = raw_r + raw_g + raw_b;
+    uint8_t scaled_r = 0, scaled_g = 0, scaled_b = 0;
     if (total > 0) {
       float scale = 4.0f / total;
-      scaledR = static_cast<uint8_t>(rawR * scale);
-      scaledG = static_cast<uint8_t>(rawG * scale);
-      scaledB = static_cast<uint8_t>(rawB * scale);
+      scaled_r = static_cast<uint8_t>(raw_r * scale);
+      scaled_g = static_cast<uint8_t>(raw_g * scale);
+      scaled_b = static_cast<uint8_t>(raw_b * scale);
     }
 
     if (is_background) {
-      r_ = scaledR;
-      g_ = scaledG;
-      b_ = scaledB;
+      r_ = scaled_r;
+      g_ = scaled_g;
+      b_ = scaled_b;
       if (!blinking_) {
         write(r_, g_, b_);
       }
     } else {
-      write(scaledR, scaledG, scaledB);
+      write(scaled_r, scaled_g, scaled_b);
     }
   }
 };

@@ -1,5 +1,7 @@
 #pragma once
 
+// clang-format off
+
 // GCC 14 + C++20 requires same-type operator== for std::optional<T> comparison.
 // ClosureControl structs only define operator==(const BaseType&), which is not
 // sufficient. This header adds free-function operators via ADL without modifying

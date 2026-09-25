@@ -15,24 +15,24 @@ void SmartLightAutomation::applyMatterEvent(const MatterLight::Event& event,
   state.night_state = event.night_state;
 
   switch (event.type) {
-    case MatterLight::EventType::LightOn:
+    case MatterLight::EventType::kLightOn:
       LOGW("[Event] Light ON");
       force_light_resync = true;
       break;
-    case MatterLight::EventType::LightOff:
+    case MatterLight::EventType::kLightOff:
       LOGW("[Event] Light OFF");
       force_light_resync = true;
       break;
-    case MatterLight::EventType::SwitchOn:
+    case MatterLight::EventType::kSwitchOn:
       LOGW("[Event] Switch ON");
       break;
-    case MatterLight::EventType::SwitchOff:
+    case MatterLight::EventType::kSwitchOff:
       LOGW("[Event] Switch OFF");
       break;
-    case MatterLight::EventType::NightOn:
+    case MatterLight::EventType::kNightOn:
       LOGW("[Event] Night ON");
       break;
-    case MatterLight::EventType::NightOff:
+    case MatterLight::EventType::kNightOff:
       LOGW("[Event] Night OFF");
       break;
   }
@@ -58,16 +58,16 @@ SmartLightStateDelta SmartLightAutomation::computeStateDelta(
 void SmartLightAutomation::applyDerivedRules(
     const SmartLightRuntimeState& previous_state,
     SmartLightRuntimeState& state) {
-  applyLightNightInterlock_(computeStateDelta(previous_state, state), state);
-  applyNightSwitchInterlock_(state);
+  applyLightNightInterlock(computeStateDelta(previous_state, state), state);
+  applyNightSwitchInterlock(state);
   if (!state.night_state) {
-    syncSwitchStateFromLight_(computeStateDelta(previous_state, state), state);
+    syncSwitchStateFromLight(computeStateDelta(previous_state, state), state);
   }
   applyOccupancyRules(state);
-  applyNightSwitchInterlock_(state);
+  applyNightSwitchInterlock(state);
 }
 
-void SmartLightAutomation::applyLightNightInterlock_(
+void SmartLightAutomation::applyLightNightInterlock(
     const SmartLightStateDelta& delta, SmartLightRuntimeState& state) {
   if (delta.light_state_changed && state.night_state) {
     state.night_state = false;
@@ -79,7 +79,7 @@ void SmartLightAutomation::applyLightNightInterlock_(
   }
 }
 
-void SmartLightAutomation::applyNightSwitchInterlock_(
+void SmartLightAutomation::applyNightSwitchInterlock(
     SmartLightRuntimeState& state) {
   if (!state.night_state || !state.switch_state) return;
 
@@ -87,7 +87,7 @@ void SmartLightAutomation::applyNightSwitchInterlock_(
   LOGW("[SwitchState] %d (NightState)", state.switch_state);
 }
 
-void SmartLightAutomation::syncSwitchStateFromLight_(
+void SmartLightAutomation::syncSwitchStateFromLight(
     const SmartLightStateDelta& delta, SmartLightRuntimeState& state) {
   if (!delta.light_state_changed) return;
 
@@ -119,13 +119,13 @@ void SmartLightAutomation::applyOccupancyRules(SmartLightRuntimeState& state) {
 
 RgbLed::Color SmartLightAutomation::selectStatusColor(
     const SmartLightRuntimeState& state, bool commissioned, bool connected) {
-  if (!commissioned) return RgbLed::Color::Magenta;
-  if (!connected) return RgbLed::Color::Red;
-  if (!state.switch_state) return RgbLed::Color::Off;
+  if (!commissioned) return RgbLed::Color::kMagenta;
+  if (!connected) return RgbLed::Color::kRed;
+  if (!state.switch_state) return RgbLed::Color::kOff;
 
   if (!state.light_state && state.ambient_light_mode_enabled && state.is_bright) {
-    return state.occupancy_state ? RgbLed::Color::Cyan : RgbLed::Color::Yellow;
+    return state.occupancy_state ? RgbLed::Color::kCyan : RgbLed::Color::kYellow;
   }
 
-  return state.occupancy_state ? RgbLed::Color::Blue : RgbLed::Color::White;
+  return state.occupancy_state ? RgbLed::Color::kBlue : RgbLed::Color::kWhite;
 }
