@@ -6,6 +6,7 @@
 #include "ota_service.h"
 
 #include <esp_app_desc.h>
+#include <esp_app_format.h>
 #include <esp_ota_ops.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -20,6 +21,19 @@
 namespace {
 
 constexpr size_t kOtaRecvBufSize = 4096;
+constexpr int kMaxConsecutiveTimeouts = 5;
+
+int receiveChunk(httpd_req_t* req, char* data, size_t size,
+                 int& consecutive_timeouts) {
+  while (true) {
+    const int received = httpd_req_recv(req, data, size);
+    if (received != HTTPD_SOCK_ERR_TIMEOUT) {
+      consecutive_timeouts = 0;
+      return received;
+    }
+    if (++consecutive_timeouts > kMaxConsecutiveTimeouts) return 0;
+  }
+}
 
 bool queryFlagSet(httpd_req_t* req, const char* key) {
   const size_t query_len = httpd_req_get_url_query_len(req);
@@ -65,34 +79,57 @@ esp_err_t handleUpdate(httpd_req_t* req) {
     return ESP_OK;
   }
 
+  if (req->content_len > update_partition->size) {
+    sendPlainError(req, "413 Content Too Large", "image is too large\n");
+    return ESP_OK;
+  }
+
+  std::string buf(kOtaRecvBufSize, '\0');
+  int consecutive_timeouts = 0;
+  const int first_len = receiveChunk(
+      req, buf.data(), std::min(buf.size(), req->content_len),
+      consecutive_timeouts);
+  if (first_len <= 0) {
+    sendPlainError(req,
+                   first_len == 0 ? "408 Request Timeout" : "400 Bad Request",
+                   first_len == 0 ? "upload stalled\n" : "receive failed\n");
+    return ESP_OK;
+  }
+  if (static_cast<uint8_t>(buf[0]) != ESP_IMAGE_HEADER_MAGIC) {
+    LOGE("[OTA] invalid first byte: expected 0xE9, got 0x%02X",
+         static_cast<unsigned>(static_cast<uint8_t>(buf[0])));
+    sendPlainError(
+        req, "400 Bad Request",
+        "invalid image header; upload the raw .bin file (curl requires @ before the path)\n");
+    return ESP_OK;
+  }
+
+  // Erase one sector at a time as data arrives. Erasing the complete OTA
+  // partition here can monopolize the single CPU long enough to starve IDLE
+  // and trigger the task watchdog.
   esp_ota_handle_t ota_handle = 0;
-  esp_err_t err =
-      esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &ota_handle);
+  esp_err_t err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES,
+                                &ota_handle);
   if (err != ESP_OK) {
     sendPlainError(req, "500 Internal Server Error", "esp_ota_begin failed\n");
     return ESP_OK;
   }
 
-  std::string buf(kOtaRecvBufSize, '\0');
   size_t received = 0;
-  int consecutive_timeouts = 0;
-  constexpr int kMaxConsecutiveTimeouts = 5;  // 6 timeouts x 5s = ~30s of dead silence total
+  size_t next_progress_percent = 10;
+  LOGI("[OTA] Progress: 0%% (%zu bytes)", req->content_len);
   while (received < req->content_len) {
-    const int ret = httpd_req_recv(
-        req, buf.data(),
-        std::min(buf.size(), req->content_len - received));
-    if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-      if (++consecutive_timeouts > kMaxConsecutiveTimeouts) {
-        esp_ota_abort(ota_handle);
-        sendPlainError(req, "408 Request Timeout", "upload stalled\n");
-        return ESP_OK;
-      }
-      continue;
-    }
-    consecutive_timeouts = 0;
+    const int ret = received == 0
+                        ? first_len
+                        : receiveChunk(
+                              req, buf.data(),
+                              std::min(buf.size(), req->content_len - received),
+                              consecutive_timeouts);
     if (ret <= 0) {
       esp_ota_abort(ota_handle);
-      sendPlainError(req, "400 Bad Request", "receive failed\n");
+      sendPlainError(req,
+                     ret == 0 ? "408 Request Timeout" : "400 Bad Request",
+                     ret == 0 ? "upload stalled\n" : "receive failed\n");
       return ESP_OK;
     }
     if (esp_ota_write(ota_handle, buf.data(), ret) != ESP_OK) {
@@ -101,6 +138,16 @@ esp_err_t handleUpdate(httpd_req_t* req) {
       return ESP_OK;
     }
     received += ret;
+    const size_t progress_percent = received * 100 / req->content_len;
+    while (next_progress_percent <= progress_percent &&
+           next_progress_percent <= 100) {
+      LOGI("[OTA] Progress: %zu%% (%zu/%zu bytes)", next_progress_percent,
+           received, req->content_len);
+      next_progress_percent += 10;
+    }
+    // HTTPD has a higher priority than IDLE. Let the watchdog-observed IDLE
+    // task run between sector erases during fast uploads.
+    vTaskDelay(1);
   }
 
   err = esp_ota_end(ota_handle);
