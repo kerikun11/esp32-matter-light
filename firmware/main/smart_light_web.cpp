@@ -41,6 +41,10 @@ std::string requestHeader(httpd_req_t* req, const char* name) {
 
 void SmartLightWeb::begin() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  // Fabric removal synchronously runs Matter cleanup callbacks. The HTTPD
+  // default (4096 bytes) is too small for that call chain on ESP32-C6 and
+  // trips the stack protector inside newlib formatting code.
+  config.stack_size = 8192;
   config.max_uri_handlers = 9;
   // max_open_sockets(7) reserves 3 for the server's own internal use, so
   // only ~4 slots are actually available to clients. Without this, once
