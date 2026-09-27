@@ -37,6 +37,8 @@ bool SmartLightController::begin() {
   last_light_state_ = false;
   last_switch_state_ = true;
   last_night_state_ = false;
+  // Must run before Matter starts Wi-Fi.
+  if (NetworkHealth::prepareWifi() != ESP_OK) LOGW("[Net] Wi-Fi preparation failed");
   if (!matter_light_.begin(last_light_state_, last_switch_state_, last_night_state_,
                            settings_.night_light_feature_enabled)) return false;
 

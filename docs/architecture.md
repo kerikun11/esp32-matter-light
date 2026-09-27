@@ -26,7 +26,12 @@ Matterのコールバックは操作をキューへ渡す。HTTPタスクは設�
 アプリタスクが入力、製品ルール、出力、Web表示状態の公開を順に処理する。
 ローカルのON/OFF変更は `attribute::report()` で通知し、自分の変更を受信イベントへ戻さない。
 Fabric参照・操作とペアリング受付は共通MatterサービスでCHIPロックを取得する。
-ネットワーク監視はIPv4喪失時のDHCP再試行とIPv4/IPv6のmDNS更新を担当する。
+ネットワーク監視はIPv4/IPv6のmDNS更新と、`/device-info` の `network` 診断
+（DHCP状態・再接続回数など）を担当する。
+Matter起動前に `NetworkHealth::prepareWifi()` でWi-Fiを初期化し、STAの11bレートを無効化する。
+弱電界では11b有効時にWi-FiドライバのDHCP/DNS送信経路が接続後しばらくして止まり、リース更新が
+失敗するため（ESP32-C6・IDF 5.5.5で実測）。保険として、リンク確立中にIPv4が10分間得られない場合は
+Wi-Fiだけ再接続する。IPv4を失ってもMatterはIPv6で動作するため再起動はしない。
 
 ## 共通コンポーネントの同期
 

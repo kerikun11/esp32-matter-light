@@ -3,5 +3,5 @@ idf_component_register(
   INCLUDE_DIRS "include"
   REQUIRES esp_matter esp_http_server esp_netif esp_event freertos nvs_flash
            esp_timer driver led_strip
-  PRIV_REQUIRES app_update esp_app_format esp_system esp_wifi mdns json
+  PRIV_REQUIRES app_update esp_app_format esp_system esp_wifi lwip mdns json
 )

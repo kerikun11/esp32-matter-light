@@ -5,44 +5,132 @@
 #include "device_common/network/network_health.h"
 
 #include <esp_heap_caps.h>
+#include <esp_netif_net_stack.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
+#include <lwip/dhcp.h>
+#include <lwip/netif.h>
+#include <lwip/prot/dhcp.h>
+#include <lwip/udp.h>
 #include <mdns.h>
 
 #include <algorithm>
+#include <atomic>
 
 #include "device_common/system/app_log.h"
 
 namespace {
 constexpr const char* kStaNetifKey = "WIFI_STA_DEF";
 constexpr int64_t kWifiPowerSaveIntervalMs = 1000;
-constexpr int64_t kIpv4WatchdogIntervalMs = 15000;
+// Last resort if DHCP still cannot get through (see prepareWifi()); a fresh
+// association restores the driver's DHCP transmit path.
+constexpr int64_t kWifiReconnectAfterMs = 10 * 60 * 1000;
 constexpr int64_t kMdnsSyncIntervalMs = 1000;
 constexpr int64_t kDiagLogIntervalMs = 5 * 60 * 1000;
 
 int64_t nowMs() { return esp_timer_get_time() / 1000; }
+
+// Written by the app task, read by diagnostics() from the HTTP task. A device
+// has a single STA interface, so these are shared by all instances.
+std::atomic<uint32_t> wifi_reconnects{0};
+std::atomic<uint32_t> ipv4_lost_count{0};
+std::atomic<int64_t> ipv4_missing_since_ms{-1};
+
+const char* dhcpStateName(int state) {
+  switch (state) {
+    case -1:
+      return "none";
+    case DHCP_STATE_OFF:
+      return "off";
+    case DHCP_STATE_REQUESTING:
+      return "requesting";
+    case DHCP_STATE_INIT:
+      return "init";
+    case DHCP_STATE_REBOOTING:
+      return "rebooting";
+    case DHCP_STATE_REBINDING:
+      return "rebinding";
+    case DHCP_STATE_RENEWING:
+      return "renewing";
+    case DHCP_STATE_SELECTING:
+      return "selecting";
+    case DHCP_STATE_CHECKING:
+      return "checking";
+    case DHCP_STATE_BOUND:
+      return "bound";
+    case DHCP_STATE_BACKING_OFF:
+      return "backing_off";
+    default:
+      return "unknown";
+  }
+}
+
+// lwIP state must be accessed on the TCP/IP task (esp_netif_tcpip_exec()).
+struct DhcpProbe {
+  esp_netif_t* netif = nullptr;
+  int state = -1;  // -1: no DHCP client attached
+  int tries = 0;
+};
+
+esp_err_t probeDhcp(void* ctx) {
+  auto* probe = static_cast<DhcpProbe*>(ctx);
+  auto* lwip_netif =
+      static_cast<struct netif*>(esp_netif_get_netif_impl(probe->netif));
+  if (!lwip_netif) return ESP_ERR_INVALID_STATE;
+  if (const dhcp* client = netif_dhcp_data(lwip_netif)) {
+    probe->state = client->state;
+    probe->tries = client->tries;
+  }
+  return ESP_OK;
+}
+
+// Bound UDP PCBs only; lwIP allocates PCBs from the heap
+// (MEMP_MEM_MALLOC), so there is no fixed pool to report.
+struct UdpPortProbe {
+  std::array<uint16_t, 32> ports{};
+  size_t port_count = 0;
+};
+
+esp_err_t probeUdpPorts(void* ctx) {
+  auto* probe = static_cast<UdpPortProbe*>(ctx);
+  for (udp_pcb* pcb = udp_pcbs; pcb && probe->port_count < probe->ports.size();
+       pcb = pcb->next) {
+    probe->ports[probe->port_count++] = pcb->local_port;
+  }
+  return ESP_OK;
+}
 }  // namespace
+
+esp_err_t NetworkHealth::prepareWifi() {
+  esp_err_t err = esp_netif_init();
+  if (err != ESP_OK) return err;
+  err = esp_event_loop_create_default();
+  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) return err;
+  if (!esp_netif_get_handle_from_ifkey(kStaNetifKey) &&
+      !esp_netif_create_default_wifi_sta()) {
+    return ESP_FAIL;
+  }
+  const wifi_init_config_t config = WIFI_INIT_CONFIG_DEFAULT();
+  err = esp_wifi_init(&config);
+  if (err != ESP_OK) return err;
+  // The driver sends DHCP/DNS frames through a dedicated path that, on a weak
+  // link with 11b rates enabled, stops transmitting some time after
+  // association: every lease renewal then fails while other traffic keeps
+  // flowing. Measured on ESP32-C6 (IDF 5.5.5): disabling 11b rates avoids it.
+  err = esp_wifi_config_11b_rate(WIFI_IF_STA, true);
+  if (err != ESP_OK) {
+    LOGW("[Net] Failed to disable 11b rates: %s", esp_err_to_name(err));
+  }
+  return ESP_OK;
+}
 
 void NetworkHealth::begin(const std::string& hostname) {
   hostname_ = hostname;
-
-  const esp_err_t err = esp_event_handler_register(
-      IP_EVENT, IP_EVENT_STA_LOST_IP, &NetworkHealth::ipEventHandler, this);
-  if (err != ESP_OK) {
-    LOGW("[Net] Failed to register IPv4 recovery: %s", esp_err_to_name(err));
-  }
-
   syncMdnsHostname(true);
 }
 
 void NetworkHealth::handle() {
-  if (dhcp_restart_requested_.exchange(false)) {
-    if (esp_netif_t* netif = esp_netif_get_handle_from_ifkey(kStaNetifKey)) {
-      restartDhcpClient(netif);
-    }
-  }
-
   syncWifiPowerSave();
   ensureIpv4Address();
   syncMdnsHostname(false);
@@ -52,33 +140,6 @@ void NetworkHealth::handle() {
 void NetworkHealth::setHostname(const std::string& hostname) {
   hostname_ = hostname;
   syncMdnsHostname(true);
-}
-
-void NetworkHealth::ipEventHandler(void* arg, esp_event_base_t event_base,
-                                   int32_t event_id, void*) {
-  if (event_base == IP_EVENT && event_id == IP_EVENT_STA_LOST_IP) {
-    // Runs on the default event loop task: only flag the request here and
-    // let the app task restart DHCP.
-    static_cast<NetworkHealth*>(arg)->dhcp_restart_requested_ = true;
-  }
-}
-
-void NetworkHealth::restartDhcpClient(esp_netif_t* netif) {
-  const esp_err_t stop_err = esp_netif_dhcpc_stop(netif);
-  if (stop_err != ESP_OK &&
-      stop_err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
-    LOGW("[Net] Failed to stop DHCP client: %s", esp_err_to_name(stop_err));
-    return;
-  }
-
-  const esp_err_t start_err = esp_netif_dhcpc_start(netif);
-  if (start_err == ESP_OK ||
-      start_err == ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
-    LOGI("[Net] DHCP client restarted");
-  } else {
-    LOGW("[Net] Failed to restart DHCP client: %s",
-         esp_err_to_name(start_err));
-  }
 }
 
 // Matter starts Wi-Fi asynchronously (after begin()) and may change the power
@@ -98,25 +159,66 @@ void NetworkHealth::syncWifiPowerSave() {
   }
 }
 
-// Fallback for the case where a single DHCP restart (triggered by
-// IP_EVENT_STA_LOST_IP) fails to obtain a new lease and no further lost-IP
-// event ever fires again: periodically check whether the STA interface is up
-// but still has no IPv4 address, and keep retrying DHCP until it succeeds.
-// Without this, a one-shot failed renewal can leave the device reachable
-// over Matter (IPv6 link-local) forever while the web server over IPv4 stays
-// unreachable until a manual power cycle.
+// lwIP keeps retrying DHCP on its own; only if that yields no lease for a long
+// time, reassociate with the AP. Never reboot: without a lease the device
+// stays reachable over IPv6 and Matter.
 void NetworkHealth::ensureIpv4Address() {
   esp_netif_t* netif = esp_netif_get_handle_from_ifkey(kStaNetifKey);
   esp_netif_ip_info_t ip_info{};
+  const bool had_ipv4 = has_ipv4_;
   has_ipv4_ = netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK &&
               ip_info.ip.addr != 0;
-  if (has_ipv4_ || !netif || !esp_netif_is_netif_up(netif)) return;
-
   const int64_t now = nowMs();
-  if (now - last_ipv4_watchdog_attempt_ms_ < kIpv4WatchdogIntervalMs) return;
-  last_ipv4_watchdog_attempt_ms_ = now;
-  LOGW("[Net] Wi-Fi is up but IPv4 address is missing; retrying DHCP");
-  restartDhcpClient(netif);
+  if (has_ipv4_) {
+    ipv4_missing_since_ms = -1;
+    ipv4_missing_link_up_since_ms_ = -1;
+    return;
+  }
+  if (had_ipv4) {
+    ++ipv4_lost_count;
+    LOGW("[Net] IPv4 address lost");
+  }
+  if (ipv4_missing_since_ms < 0) ipv4_missing_since_ms = now;
+  if (!netif || !esp_netif_is_netif_up(netif)) {
+    ipv4_missing_link_up_since_ms_ = -1;
+    return;
+  }
+  if (ipv4_missing_link_up_since_ms_ < 0) ipv4_missing_link_up_since_ms_ = now;
+
+  if (now - ipv4_missing_link_up_since_ms_ >= kWifiReconnectAfterMs) {
+    // Matter's connectivity manager reconnects right after the disconnect
+    // event, so a disconnect is enough and keeps its station state consistent.
+    const esp_err_t err = esp_wifi_disconnect();
+    ++wifi_reconnects;
+    ipv4_missing_link_up_since_ms_ = -1;
+    LOGW("[Net] No IPv4 address for %llds; reconnecting Wi-Fi: %s",
+         kWifiReconnectAfterMs / 1000, esp_err_to_name(err));
+  }
+}
+
+NetworkDiagnostics NetworkHealth::diagnostics() {
+  NetworkDiagnostics diag;
+  diag.wifi_reconnects = wifi_reconnects;
+  diag.ipv4_lost_count = ipv4_lost_count;
+  const int64_t missing_since = ipv4_missing_since_ms;
+  if (missing_since >= 0) {
+    diag.ipv4_missing_seconds = (nowMs() - missing_since) / 1000;
+  }
+
+  if (esp_netif_t* netif = esp_netif_get_handle_from_ifkey(kStaNetifKey)) {
+    DhcpProbe probe;
+    probe.netif = netif;
+    if (esp_netif_tcpip_exec(probeDhcp, &probe) == ESP_OK) {
+      diag.dhcp_state = dhcpStateName(probe.state);
+      diag.dhcp_tries = probe.tries;
+    }
+  }
+
+  UdpPortProbe udp;
+  if (esp_netif_tcpip_exec(probeUdpPorts, &udp) == ESP_OK) {
+    diag.udp_ports.assign(udp.ports.begin(), udp.ports.begin() + udp.port_count);
+  }
+  return diag;
 }
 
 void NetworkHealth::syncMdnsHostname(bool force) {
@@ -125,11 +227,11 @@ void NetworkHealth::syncMdnsHostname(bool force) {
   last_mdns_sync_attempt_ms_ = now;
 
   esp_netif_t* netif = esp_netif_get_handle_from_ifkey(kStaNetifKey);
+  if (!netif) return;
+  // Without an IPv4 lease, advertise IPv6 only instead of keeping a stale
+  // A record that makes clients try an unreachable address.
   esp_netif_ip_info_t ip_info{};
-  if (!netif || esp_netif_get_ip_info(netif, &ip_info) != ESP_OK ||
-      ip_info.ip.addr == 0) {
-    return;
-  }
+  if (esp_netif_get_ip_info(netif, &ip_info) != ESP_OK) ip_info.ip.addr = 0;
 
   if (!mdns_hostname_.empty() && mdns_hostname_ != hostname_) {
     const esp_err_t err = mdns_delegate_hostname_remove(mdns_hostname_.c_str());
@@ -158,13 +260,19 @@ void NetworkHealth::syncMdnsHostname(bool force) {
   std::sort(ipv6_addresses.begin(), ipv6_addresses.end());
 
   mdns_ip_addr_t addresses[1 + CONFIG_LWIP_IPV6_NUM_ADDRESSES]{};
-  addresses[0].addr.type = ESP_IPADDR_TYPE_V4;
-  addresses[0].addr.u_addr.ip4 = ip_info.ip;
-  for (size_t i = 0; i < ipv6_addresses.size(); ++i) {
+  size_t address_count = 0;
+  if (ip_info.ip.addr != 0) {
+    addresses[address_count].addr.type = ESP_IPADDR_TYPE_V4;
+    addresses[address_count++].addr.u_addr.ip4 = ip_info.ip;
+  }
+  for (const auto& ipv6 : ipv6_addresses) {
+    addresses[address_count].addr.type = ESP_IPADDR_TYPE_V6;
+    std::copy(ipv6.begin(), ipv6.end(),
+              addresses[address_count++].addr.u_addr.ip6.addr);
+  }
+  if (address_count == 0) return;
+  for (size_t i = 0; i + 1 < address_count; ++i) {
     addresses[i].next = &addresses[i + 1];
-    addresses[i + 1].addr.type = ESP_IPADDR_TYPE_V6;
-    std::copy(ipv6_addresses[i].begin(), ipv6_addresses[i].end(),
-              addresses[i + 1].addr.u_addr.ip6.addr);
   }
 
   if (mdns_hostname_.empty()) {

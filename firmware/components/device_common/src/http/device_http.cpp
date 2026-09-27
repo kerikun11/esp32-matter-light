@@ -16,6 +16,7 @@
 
 #include "device_common/http/web_asset_http.h"
 #include "device_common/http/web_utils.h"
+#include "device_common/network/network_health.h"
 namespace device_common {
 namespace {
 std::string requestHeader(httpd_req_t* req, const char* name) {
@@ -135,6 +136,25 @@ esp_err_t sendDeviceInfo(httpd_req_t* req, const char* manual_code, const char* 
         ok = false;
       }
     }
+  }
+  auto* network = cJSON_AddObjectToObject(info, "network");
+  ok &= network != nullptr;
+  if (network) {
+    const auto diag = NetworkHealth::diagnostics();
+    ok &= addString(network, "dhcp_state", diag.dhcp_state);
+    ok &= addNumber(network, "dhcp_tries", diag.dhcp_tries);
+    ok &= addNumber(network, "wifi_reconnects", diag.wifi_reconnects);
+    auto* ports = cJSON_AddArrayToObject(network, "udp_ports");
+    ok &= ports != nullptr;
+    for (const auto port : diag.udp_ports) {
+      auto* item = cJSON_CreateNumber(port);
+      if (!ports || !item || !cJSON_AddItemToArray(ports, item)) {
+        cJSON_Delete(item);
+        ok = false;
+      }
+    }
+    ok &= addNumber(network, "ipv4_lost_count", diag.ipv4_lost_count);
+    ok &= addNumber(network, "ipv4_missing_seconds", static_cast<double>(diag.ipv4_missing_seconds));
   }
   ok &= addString(info, "manual_code", manual_code);
   ok &= addString(info, "qr_payload", qr_payload);
