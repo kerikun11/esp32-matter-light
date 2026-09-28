@@ -26,6 +26,13 @@ constexpr int64_t kWifiPowerSaveIntervalMs = 1000;
 // Last resort if DHCP still cannot get through (see prepareWifi()); a fresh
 // association restores the driver's DHCP transmit path.
 constexpr int64_t kWifiReconnectAfterMs = 10 * 60 * 1000;
+// While the lease is still valid: lwIP retransmits every few seconds once it
+// is rebinding (past T2), so minutes without an answer mean the DHCP path is
+// stuck. Reassociating then keeps IPv4 up instead of waiting for the lease to
+// expire. Renewing alone (T1..T2) is left alone: a single lost renewal is
+// normal on a weak link and lwIP retries it by itself.
+constexpr int64_t kRebindReconnectAfterMs = 3 * 60 * 1000;
+constexpr int64_t kDhcpCheckIntervalMs = 15000;
 constexpr int64_t kMdnsSyncIntervalMs = 1000;
 constexpr int64_t kDiagLogIntervalMs = 5 * 60 * 1000;
 
@@ -159,9 +166,10 @@ void NetworkHealth::syncWifiPowerSave() {
   }
 }
 
-// lwIP keeps retrying DHCP on its own; only if that yields no lease for a long
-// time, reassociate with the AP. Never reboot: without a lease the device
-// stays reachable over IPv6 and Matter.
+// lwIP keeps retrying DHCP on its own; reassociate with the AP only when the
+// lease is about to run out unanswered or has been missing for a long time.
+// Never reboot: without a lease the device stays reachable over IPv6 and
+// Matter.
 void NetworkHealth::ensureIpv4Address() {
   esp_netif_t* netif = esp_netif_get_handle_from_ifkey(kStaNetifKey);
   esp_netif_ip_info_t ip_info{};
@@ -172,6 +180,7 @@ void NetworkHealth::ensureIpv4Address() {
   if (has_ipv4_) {
     ipv4_missing_since_ms = -1;
     ipv4_missing_link_up_since_ms_ = -1;
+    checkLeaseRebinding(netif, now);
     return;
   }
   if (had_ipv4) {
@@ -186,14 +195,34 @@ void NetworkHealth::ensureIpv4Address() {
   if (ipv4_missing_link_up_since_ms_ < 0) ipv4_missing_link_up_since_ms_ = now;
 
   if (now - ipv4_missing_link_up_since_ms_ >= kWifiReconnectAfterMs) {
-    // Matter's connectivity manager reconnects right after the disconnect
-    // event, so a disconnect is enough and keeps its station state consistent.
-    const esp_err_t err = esp_wifi_disconnect();
-    ++wifi_reconnects;
     ipv4_missing_link_up_since_ms_ = -1;
-    LOGW("[Net] No IPv4 address for %llds; reconnecting Wi-Fi: %s",
-         kWifiReconnectAfterMs / 1000, esp_err_to_name(err));
+    reconnectWifi("no IPv4 address for 10 min");
   }
+}
+
+void NetworkHealth::checkLeaseRebinding(esp_netif_t* netif, int64_t now) {
+  if (now - last_dhcp_check_ms_ < kDhcpCheckIntervalMs) return;
+  last_dhcp_check_ms_ = now;
+
+  DhcpProbe probe;
+  probe.netif = netif;
+  if (esp_netif_tcpip_exec(probeDhcp, &probe) != ESP_OK) return;
+  if (probe.state != DHCP_STATE_REBINDING) {
+    rebinding_since_ms_ = -1;
+    return;
+  }
+  if (rebinding_since_ms_ < 0) rebinding_since_ms_ = now;
+  if (now - rebinding_since_ms_ < kRebindReconnectAfterMs) return;
+  rebinding_since_ms_ = -1;
+  reconnectWifi("DHCP rebinding unanswered for 3 min");
+}
+
+// Matter's connectivity manager reconnects right after the disconnect event,
+// so a disconnect is enough and keeps its station state consistent.
+void NetworkHealth::reconnectWifi(const char* reason) {
+  const esp_err_t err = esp_wifi_disconnect();
+  ++wifi_reconnects;
+  LOGW("[Net] Reconnecting Wi-Fi (%s): %s", reason, esp_err_to_name(err));
 }
 
 NetworkDiagnostics NetworkHealth::diagnostics() {

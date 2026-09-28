@@ -54,6 +54,8 @@ class NetworkHealth {
  private:
   void syncWifiPowerSave();
   void ensureIpv4Address();
+  void checkLeaseRebinding(esp_netif_t* netif, int64_t now);
+  static void reconnectWifi(const char* reason);
   void syncMdnsHostname(bool force);
   void logDiagnostics();
 
@@ -64,6 +66,8 @@ class NetworkHealth {
   // Start of the current period with the Wi-Fi link up but no IPv4 address;
   // -1 while IPv4 is present or the link is down.
   int64_t ipv4_missing_link_up_since_ms_ = -1;
+  int64_t last_dhcp_check_ms_ = 0;
+  int64_t rebinding_since_ms_ = -1;  // -1 unless the DHCP client is rebinding
   int64_t last_diag_log_ms_ = -1;
 
   std::string mdns_hostname_;
